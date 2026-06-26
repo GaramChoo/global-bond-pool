@@ -1,0 +1,1223 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>해외채권 투자 POOL 선정 시스템</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --navy:      #1F4E79;
+    --navy-mid:  #2E6DA4;
+    --navy-light:#D6E4F0;
+    --green:     #375623;
+    --green-light:#E2EFDA;
+    --red:       #C00000;
+    --red-light: #FCE4D6;
+    --orange:    #F4B183;
+    --amber:     #FFF2CC;
+    --gray-50:   #F8F9FA;
+    --gray-100:  #F2F2F2;
+    --gray-200:  #E0E0E0;
+    --gray-500:  #888;
+    --gray-700:  #444;
+    --text:      #1A1A1A;
+    --mono:      'Courier New', monospace;
+    --sans:      'Segoe UI', Arial, sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--sans);
+    font-size: 13px;
+    color: var(--text);
+    background: var(--gray-50);
+    min-height: 100vh;
+  }
+
+  /* ── HEADER ── */
+  header {
+    background: var(--navy);
+    padding: 18px 32px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 2px 8px rgba(0,0,0,.25);
+  }
+  header .logo {
+    width: 36px; height: 36px;
+    background: rgba(255,255,255,.15);
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+  }
+  header h1 {
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: .3px;
+  }
+  header .sub {
+    color: rgba(255,255,255,.55);
+    font-size: 11px;
+    margin-top: 2px;
+  }
+  header .badge {
+    margin-left: auto;
+    background: rgba(255,255,255,.12);
+    color: rgba(255,255,255,.7);
+    font-size: 10px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    letter-spacing: .5px;
+  }
+
+  /* ── LAYOUT ── */
+  .container { max-width: 960px; margin: 0 auto; padding: 28px 20px 60px; }
+
+  /* ── STEP INDICATOR ── */
+  .steps {
+    display: flex;
+    align-items: center;
+    margin-bottom: 32px;
+    gap: 0;
+  }
+  .step-item {
+    display: flex; align-items: center; gap: 8px;
+    flex: 1;
+  }
+  .step-item:last-child { flex: none; }
+  .step-num {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    border: 2px solid var(--gray-200);
+    background: #fff;
+    color: var(--gray-500);
+    font-size: 11px;
+    font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    transition: all .3s;
+    flex-shrink: 0;
+  }
+  .step-label {
+    font-size: 11px;
+    color: var(--gray-500);
+    font-weight: 500;
+    transition: color .3s;
+    white-space: nowrap;
+  }
+  .step-line {
+    flex: 1;
+    height: 2px;
+    background: var(--gray-200);
+    margin: 0 8px;
+    transition: background .3s;
+  }
+  .step-item.active .step-num  { border-color: var(--navy); background: var(--navy); color: #fff; }
+  .step-item.active .step-label{ color: var(--navy); }
+  .step-item.done   .step-num  { border-color: var(--green); background: var(--green); color: #fff; }
+  .step-item.done   .step-label{ color: var(--green); }
+  .step-item.done + .step-line { background: var(--green); }
+
+  /* ── CARD ── */
+  .card {
+    background: #fff;
+    border-radius: 8px;
+    border: 1px solid var(--gray-200);
+    margin-bottom: 20px;
+    overflow: hidden;
+  }
+  .card-header {
+    background: var(--navy);
+    color: #fff;
+    padding: 12px 20px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .4px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .card-header .step-tag {
+    background: rgba(255,255,255,.2);
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 10px;
+  }
+  .card-body { padding: 20px; }
+
+  /* ── FILE UPLOAD ── */
+  .upload-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .upload-zone {
+    border: 2px dashed var(--gray-200);
+    border-radius: 6px;
+    padding: 20px 16px;
+    text-align: center;
+    cursor: pointer;
+    transition: all .2s;
+    position: relative;
+  }
+  .upload-zone:hover { border-color: var(--navy-mid); background: var(--navy-light); }
+  .upload-zone.loaded { border-color: var(--green); border-style: solid; background: var(--green-light); }
+  .upload-zone input[type=file] {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+  }
+  .upload-zone .icon { font-size: 28px; margin-bottom: 8px; }
+  .upload-zone .label { font-weight: 600; font-size: 12px; color: var(--navy); }
+  .upload-zone .hint  { font-size: 11px; color: var(--gray-500); margin-top: 4px; }
+  .upload-zone .loaded-name {
+    font-size: 11px; color: var(--green); font-weight: 600; margin-top: 6px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  /* ── EXCEPTION TABLE ── */
+  .exc-table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+  .exc-table th {
+    background: var(--gray-100); font-size: 11px; font-weight: 700;
+    padding: 7px 10px; text-align: left; border-bottom: 1px solid var(--gray-200);
+  }
+  .exc-table td {
+    padding: 6px 10px; border-bottom: 1px solid var(--gray-200); font-size: 12px;
+    vertical-align: middle;
+  }
+  .exc-table tr:last-child td { border-bottom: none; }
+  .exc-table input[type=text] {
+    border: 1px solid var(--gray-200); border-radius: 3px;
+    padding: 4px 8px; font-size: 12px; width: 100%;
+    font-family: var(--sans);
+    outline: none;
+  }
+  .exc-table input[type=text]:focus { border-color: var(--navy-mid); }
+  .ticker-input { font-family: var(--mono) !important; font-size: 12px !important; text-transform: uppercase; }
+  .btn-sm {
+    background: none; border: 1px solid var(--gray-200);
+    border-radius: 3px; padding: 4px 10px; font-size: 11px;
+    cursor: pointer; color: var(--gray-700); transition: all .15s;
+  }
+  .btn-sm:hover { border-color: var(--navy); color: var(--navy); }
+  .btn-sm.danger:hover { border-color: var(--red); color: var(--red); }
+  .btn-add-row {
+    margin-top: 10px; padding: 6px 14px; font-size: 11px;
+    border: 1px dashed var(--navy-mid); background: none; border-radius: 4px;
+    color: var(--navy-mid); cursor: pointer; transition: all .15s;
+  }
+  .btn-add-row:hover { background: var(--navy-light); }
+
+  /* ── FILTER CONFIG ── */
+  .filter-grid { display: grid; gap: 10px; }
+  .filter-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 14px;
+    border-radius: 5px;
+    border: 1px solid var(--gray-200);
+    background: var(--gray-50);
+    transition: background .15s;
+  }
+  .filter-row:hover { background: #fff; }
+  .filter-row .step-badge {
+    font-family: var(--mono);
+    font-size: 10px; font-weight: 700;
+    color: var(--navy); background: var(--navy-light);
+    padding: 2px 7px; border-radius: 3px;
+    flex-shrink: 0; min-width: 32px; text-align: center;
+  }
+  .filter-row .desc { flex: 1; font-size: 12px; color: var(--gray-700); }
+  .filter-row .desc small { color: var(--gray-500); font-size: 10px; display: block; margin-top: 2px; }
+  .filter-row input[type=number] {
+    width: 60px; border: 1px solid var(--gray-200); border-radius: 3px;
+    padding: 4px 6px; font-size: 12px; text-align: center;
+    font-family: var(--mono); outline: none;
+  }
+  .filter-row input[type=number]:focus { border-color: var(--navy-mid); }
+  .filter-row .unit { font-size: 11px; color: var(--gray-500); }
+  .filter-row input[type=checkbox] { width: 15px; height: 15px; cursor: pointer; accent-color: var(--navy); }
+
+  /* ── RUN BUTTON ── */
+  .run-wrap { text-align: center; padding: 10px 0 4px; }
+  .btn-run {
+    background: var(--navy);
+    color: #fff; border: none;
+    padding: 13px 48px;
+    font-size: 14px; font-weight: 700;
+    border-radius: 6px; cursor: pointer;
+    letter-spacing: .5px;
+    transition: background .2s, transform .1s;
+    box-shadow: 0 2px 8px rgba(31,78,121,.3);
+  }
+  .btn-run:hover:not(:disabled)  { background: var(--navy-mid); transform: translateY(-1px); }
+  .btn-run:active:not(:disabled) { transform: translateY(0); }
+  .btn-run:disabled { background: var(--gray-200); color: var(--gray-500); cursor: not-allowed; box-shadow: none; }
+  .run-note { font-size: 11px; color: var(--gray-500); margin-top: 8px; }
+
+  /* ── PROGRESS ── */
+  #progress-wrap { display: none; margin-top: 20px; }
+  .progress-bar-outer {
+    height: 6px; background: var(--gray-200); border-radius: 3px; overflow: hidden;
+  }
+  .progress-bar-inner {
+    height: 100%; background: var(--navy-mid); border-radius: 3px;
+    width: 0%; transition: width .4s ease;
+  }
+  #progress-label { font-size: 11px; color: var(--gray-500); margin-top: 6px; text-align: center; }
+
+  /* ── RESULTS ── */
+  #results { display: none; }
+  .results-tabs {
+    display: flex; gap: 0;
+    border-bottom: 2px solid var(--navy);
+    margin-bottom: 0;
+  }
+  .tab-btn {
+    padding: 9px 20px; font-size: 12px; font-weight: 600;
+    border: none; background: var(--gray-100); cursor: pointer;
+    border-radius: 6px 6px 0 0; color: var(--gray-500);
+    transition: all .15s;
+    border: 1px solid var(--gray-200); border-bottom: none;
+    margin-right: 3px;
+  }
+  .tab-btn:hover   { background: var(--navy-light); color: var(--navy); }
+  .tab-btn.active  { background: var(--navy); color: #fff; border-color: var(--navy); }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* ── SUMMARY TABLE ── */
+  .summary-table { width: 100%; border-collapse: collapse; margin-top: 0; }
+  .summary-table th {
+    background: var(--navy); color: #fff;
+    font-size: 11px; font-weight: 700;
+    padding: 9px 12px; text-align: center;
+    border: 1px solid rgba(255,255,255,.15);
+  }
+  .summary-table th:nth-child(2) { text-align: left; }
+  .summary-table td {
+    padding: 8px 12px; font-size: 12px;
+    border: 1px solid var(--gray-200);
+    text-align: center; vertical-align: middle;
+  }
+  .summary-table td:nth-child(2) { text-align: left; }
+  .summary-table tr:nth-child(even) td { background: var(--gray-50); }
+  .summary-table .excl-val { color: var(--red); font-weight: 600; font-family: var(--mono); }
+  .summary-table .num-val  { font-family: var(--mono); }
+  .summary-table .final-row td {
+    background: var(--green) !important; color: #fff;
+    font-weight: 700;
+  }
+  .summary-table .step-col {
+    font-family: var(--mono); font-size: 10px;
+    color: var(--navy); font-weight: 700;
+  }
+
+  /* ── POOL TABLE ── */
+  .pool-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--gray-200);
+    background: var(--gray-50);
+  }
+  .pool-count {
+    font-size: 13px; font-weight: 700; color: var(--green);
+    font-family: var(--mono);
+  }
+  .pool-count span { font-size: 11px; color: var(--gray-500); font-family: var(--sans); font-weight: 400; margin-left: 4px; }
+  .pool-search {
+    border: 1px solid var(--gray-200); border-radius: 4px;
+    padding: 5px 10px; font-size: 12px; outline: none; width: 200px;
+  }
+  .pool-search:focus { border-color: var(--navy-mid); }
+  .data-table-wrap { overflow-x: auto; max-height: 440px; overflow-y: auto; }
+  .data-table {
+    width: 100%; border-collapse: collapse;
+    font-size: 11px; min-width: 760px;
+  }
+  .data-table thead th {
+    background: var(--navy); color: #fff;
+    padding: 8px 10px; text-align: left;
+    position: sticky; top: 0; z-index: 1;
+    font-size: 10px; font-weight: 700;
+    white-space: nowrap;
+    border-right: 1px solid rgba(255,255,255,.1);
+  }
+  .data-table tbody td {
+    padding: 6px 10px; border-bottom: 1px solid var(--gray-100);
+    white-space: nowrap; vertical-align: middle;
+  }
+  .data-table tbody tr:hover td { background: var(--navy-light) !important; }
+  .data-table .ticker-cell {
+    font-family: var(--mono); font-weight: 700; color: var(--navy); font-size: 11px;
+  }
+  .data-table .amt-cell { font-family: var(--mono); text-align: right; }
+  .data-table .cnt-cell { font-family: var(--mono); text-align: center; }
+  .data-table .exc-row td { background: #FFF0F0 !important; }
+  .exc-badge {
+    display: inline-block; background: var(--amber);
+    border: 1px solid #E6C619; color: #7F6000;
+    font-size: 9px; font-weight: 700;
+    padding: 1px 5px; border-radius: 3px;
+    margin-left: 4px; vertical-align: middle;
+  }
+  .exc-row .ticker-cell { color: #7F6000; }
+
+  /* ── DOWNLOAD ── */
+  .dl-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 4px; }
+  .btn-dl {
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    padding: 14px 20px;
+    border-radius: 6px; border: 2px solid;
+    font-size: 13px; font-weight: 700; cursor: pointer;
+    transition: all .2s;
+    text-decoration: none;
+  }
+  .btn-dl.usd { border-color: var(--navy); background: var(--navy); color: #fff; }
+  .btn-dl.eur { border-color: var(--green); background: var(--green); color: #fff; }
+  .btn-dl:hover { opacity: .85; transform: translateY(-1px); }
+  .btn-dl:disabled { opacity: .4; cursor: not-allowed; transform: none; }
+  .btn-dl .dl-icon { font-size: 18px; }
+  .btn-dl .dl-info { text-align: left; }
+  .btn-dl .dl-sub { font-size: 10px; font-weight: 400; opacity: .8; display: block; }
+
+  /* ── MISC ── */
+  .notice {
+    background: var(--amber); border: 1px solid #E6C619;
+    border-radius: 5px; padding: 10px 14px;
+    font-size: 11px; color: #7F6000; margin-top: 12px;
+    display: flex; gap: 8px; align-items: flex-start;
+  }
+  .error-box {
+    background: #FFF0F0; border: 1px solid var(--red);
+    border-radius: 5px; padding: 10px 14px;
+    font-size: 11px; color: var(--red); margin-top: 12px;
+  }
+  .tag-excl { background: var(--red-light); color: var(--red); font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 3px; }
+  .tag-pass { background: var(--green-light); color: var(--green); font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">📊</div>
+  <div>
+    <div class="h1" style="color:#fff;font-size:15px;font-weight:700">해외채권 투자 POOL 선정 시스템</div>
+    <div class="sub">흥국생명 / 분기별 필터링 자동화</div>
+  </div>
+  <div class="badge">v1.0</div>
+</header>
+
+<div class="container">
+
+  <!-- STEP INDICATOR -->
+  <div class="steps">
+    <div class="step-item active" id="si-1">
+      <div class="step-num">1</div>
+      <div class="step-label">파일 업로드</div>
+    </div>
+    <div class="step-line"></div>
+    <div class="step-item" id="si-2">
+      <div class="step-num">2</div>
+      <div class="step-label">조건 확인</div>
+    </div>
+    <div class="step-line"></div>
+    <div class="step-item" id="si-3">
+      <div class="step-num">3</div>
+      <div class="step-label">필터링 실행</div>
+    </div>
+    <div class="step-line"></div>
+    <div class="step-item" id="si-4">
+      <div class="step-num">4</div>
+      <div class="step-label">결과 확인 · 다운로드</div>
+    </div>
+  </div>
+
+  <!-- STEP 1: 파일 업로드 -->
+  <div class="card" id="card-upload">
+    <div class="card-header">
+      <span class="step-tag">STEP 1</span> Raw Data 업로드
+    </div>
+    <div class="card-body">
+      <div class="upload-grid">
+        <div>
+          <div style="font-size:11px;font-weight:700;color:var(--navy);margin-bottom:8px">USD 데이터</div>
+          <div class="upload-zone" id="zone-usd" onclick="document.getElementById('file-usd').click()">
+            <input type="file" id="file-usd" accept=".xlsx,.xls" onchange="loadFile('usd',this)">
+            <div class="icon">📂</div>
+            <div class="label">USD Raw Data</div>
+            <div class="hint">블룸버그 원본 .xlsx 파일</div>
+            <div class="loaded-name" id="fname-usd"></div>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:700;color:var(--green);margin-bottom:8px">EUR 데이터</div>
+          <div class="upload-zone" id="zone-eur" onclick="document.getElementById('file-eur').click()">
+            <input type="file" id="file-eur" accept=".xlsx,.xls" onchange="loadFile('eur',this)">
+            <div class="icon">📂</div>
+            <div class="label">EUR Raw Data</div>
+            <div class="hint">블룸버그 원본 .xlsx 파일</div>
+            <div class="loaded-name" id="fname-eur"></div>
+          </div>
+        </div>
+      </div>
+      <div class="notice">
+        <span>ℹ️</span>
+        <span><b>업로드 파일 형식:</b> 블룸버그 작업파일의 <b>전체목록</b> 시트가 포함된 .xlsx 파일. ESG Ticker, 중국지방정부, 지역은행 Ticker, 예외포함 시트도 동일 파일 내에 있어야 합니다.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 예외 포함 이슈어 -->
+  <div class="card">
+    <div class="card-header">
+      <span class="step-tag">STEP 1-B</span> 예외 포함 이슈어 관리
+      <span style="margin-left:auto;font-size:10px;font-weight:400;opacity:.7">필터링 대상이나 검토 후 POOL에 포함할 이슈어</span>
+    </div>
+    <div class="card-body">
+      <table class="exc-table" id="exc-table">
+        <thead>
+          <tr>
+            <th style="width:120px">Ticker</th>
+            <th>포함 사유</th>
+            <th style="width:60px">통화</th>
+            <th style="width:60px"></th>
+          </tr>
+        </thead>
+        <tbody id="exc-tbody">
+        </tbody>
+      </table>
+      <button class="btn-add-row" onclick="addExcRow()">+ 이슈어 추가</button>
+      <div id="exc-note" style="font-size:10px;color:var(--gray-500);margin-top:8px">
+        파일에 <b>예외포함</b> 시트가 있으면 자동으로 불러옵니다.
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 2: 필터링 조건 -->
+  <div class="card" id="card-filter">
+    <div class="card-header">
+      <span class="step-tag">STEP 2</span> 필터링 조건 확인
+    </div>
+    <div class="card-body">
+      <div class="filter-grid">
+        <div class="filter-row">
+          <input type="checkbox" checked disabled>
+          <span class="step-badge">#6</span>
+          <div class="desc">KP물 제외 <small>Cntry of Risk = KR</small></div>
+        </div>
+        <div class="filter-row">
+          <input type="checkbox" checked disabled>
+          <span class="step-badge">#7</span>
+          <div class="desc">발행건수 1건 이슈어 제외 <small>단, BCLASS1 = Municipals이면 유지</small></div>
+        </div>
+        <div class="filter-row">
+          <input type="checkbox" checked disabled>
+          <span class="step-badge">#8</span>
+          <div class="desc">ESG 제한업종 제외 <small>파일 내 'ESG Ticker' 시트 기준</small></div>
+        </div>
+        <div class="filter-row">
+          <input type="checkbox" checked disabled>
+          <span class="step-badge">#9</span>
+          <div class="desc">중국 지방정부 채권 제외 <small>파일 내 '중국지방정부' 시트 기준</small></div>
+        </div>
+        <div class="filter-row">
+          <input type="checkbox" checked disabled>
+          <span class="step-badge">#10</span>
+          <div class="desc">미국 지역은행 제외 <small>파일 내 '지역은행 Ticker' 시트 기준</small></div>
+        </div>
+        <div class="filter-row">
+          <input type="checkbox" checked disabled>
+          <span class="step-badge">#11</span>
+          <div class="desc">Other Financial 섹터 제외 <small>BCLASS Level 3 = Other Financial</small></div>
+        </div>
+        <div class="filter-row">
+          <input type="checkbox" checked disabled>
+          <span class="step-badge">#12</span>
+          <div class="desc">
+            섹터별 발행금액 하위
+            <input type="number" id="pct-input" value="20" min="1" max="49" style="width:52px;margin:0 4px">
+            <span class="unit">% 이슈어 제외</span>
+            <small>BCLASS 1·2·3 기준 섹터 / Step6 데이터 기준 산출</small>
+          </div>
+        </div>
+        <div class="filter-row" style="opacity:.5">
+          <input type="checkbox" disabled>
+          <span class="step-badge">#13</span>
+          <div class="desc">투자불가 은행 제외 <small>현재 미사용 (명목 유지)</small></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 3: 실행 -->
+  <div class="card" id="card-run">
+    <div class="card-header"><span class="step-tag">STEP 3</span> 필터링 실행</div>
+    <div class="card-body">
+      <div class="run-wrap">
+        <button class="btn-run" id="btn-run" onclick="runAll()" disabled>▶ 필터링 실행</button>
+        <div class="run-note" id="run-note">USD 또는 EUR 파일을 먼저 업로드해주세요.</div>
+      </div>
+      <div id="progress-wrap">
+        <div class="progress-bar-outer"><div class="progress-bar-inner" id="progress-bar"></div></div>
+        <div id="progress-label">준비 중...</div>
+      </div>
+      <div id="error-box"></div>
+    </div>
+  </div>
+
+  <!-- STEP 4: 결과 -->
+  <div class="card" id="results">
+    <div class="card-header"><span class="step-tag">STEP 4</span> 결과 확인 · 다운로드</div>
+
+    <div style="padding:16px 20px 0">
+      <div class="results-tabs" id="results-tabs"></div>
+    </div>
+
+    <div id="results-panels"></div>
+  </div>
+
+</div><!-- /container -->
+
+<script>
+// ════════════════════════════════════════════════════════
+// STATE
+// ════════════════════════════════════════════════════════
+const state = { usd: null, eur: null };
+let resultData = {};
+
+// ════════════════════════════════════════════════════════
+// FILE LOADING
+// ════════════════════════════════════════════════════════
+function loadFile(currency, input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'array' });
+      const sheetNames = wb.SheetNames;
+
+      if (!sheetNames.includes('전체목록')) {
+        showError(`'전체목록' 시트를 찾을 수 없습니다. (${file.name})`);
+        return;
+      }
+
+      const raw = sheetToObjects(wb, '전체목록');
+      const esg    = loadTickerList(wb, 'ESG Ticker', true);
+      const china  = loadTickerList(wb, '중국지방정부', false);
+      const bank   = loadTickerBankList(wb, '지역은행 Ticker');
+      const excMap = loadExceptionSheet(wb);
+
+      state[currency] = { raw, esg, china, bank, excMap, fileName: file.name };
+
+      document.getElementById(`zone-${currency}`).classList.add('loaded');
+      document.getElementById(`zone-${currency}`).querySelector('.icon').textContent = '✅';
+      document.getElementById(`fname-${currency}`).textContent = file.name;
+
+      // 예외포함 시트 병합
+      mergeExceptions(excMap, currency);
+      updateRunButton();
+    } catch(err) {
+      showError(`파일 로드 오류: ${err.message}`);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function sheetToObjects(wb, name) {
+  const ws = wb.Sheets[name];
+  if (!ws) return [];
+  return XLSX.utils.sheet_to_json(ws, { defval: '' });
+}
+
+function loadTickerList(wb, sheetName, skipHeader) {
+  const ws = wb.Sheets[sheetName];
+  if (!ws) return new Set();
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+  const set = new Set();
+  const start = skipHeader ? 1 : 0;
+  rows.slice(start).forEach(r => {
+    const v = String(r[0] || '').trim();
+    if (v && v !== '제한업종') set.add(v);
+  });
+  return set;
+}
+
+function loadTickerBankList(wb, sheetName) {
+  const ws = wb.Sheets[sheetName];
+  if (!ws) return new Set();
+  // header=1 (2번째 행이 헤더)
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+  const set = new Set();
+  rows.slice(2).forEach(r => {
+    const v = String(r[0] || '').trim();
+    if (v) set.add(v);
+  });
+  return set;
+}
+
+function loadExceptionSheet(wb) {
+  const ws = wb.Sheets['예외포함'];
+  if (!ws) return {};
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+  const map = {};
+  rows.slice(1).forEach(r => {
+    const t = String(r[0] || '').trim().toUpperCase();
+    const reason = String(r[1] || '').trim();
+    if (t) map[t] = reason;
+  });
+  return map;
+}
+
+function mergeExceptions(excMap, currency) {
+  Object.entries(excMap).forEach(([ticker, reason]) => {
+    const existing = [...document.querySelectorAll('#exc-tbody tr')];
+    const found = existing.find(tr => {
+      const t = tr.querySelector('.ticker-input')?.value?.toUpperCase();
+      return t === ticker;
+    });
+    if (!found) addExcRow(ticker, reason, currency);
+  });
+}
+
+// ════════════════════════════════════════════════════════
+// EXCEPTION TABLE
+// ════════════════════════════════════════════════════════
+function addExcRow(ticker='', reason='', currency='') {
+  const tbody = document.getElementById('exc-tbody');
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><input type="text" class="ticker-input" value="${ticker}" placeholder="예: CICFP"></td>
+    <td><input type="text" value="${reason}" placeholder="포함 사유 입력"></td>
+    <td>
+      <select style="border:1px solid var(--gray-200);border-radius:3px;padding:3px 6px;font-size:11px;outline:none">
+        <option value="both" ${currency===''?'selected':''}>공통</option>
+        <option value="usd"  ${currency==='usd'?'selected':''}>USD</option>
+        <option value="eur"  ${currency==='eur'?'selected':''}>EUR</option>
+      </select>
+    </td>
+    <td><button class="btn-sm danger" onclick="this.closest('tr').remove()">삭제</button></td>
+  `;
+  tbody.appendChild(tr);
+}
+
+function getExceptionMap(currency) {
+  const rows = document.querySelectorAll('#exc-tbody tr');
+  const map = {};
+  rows.forEach(tr => {
+    const ticker = tr.querySelector('.ticker-input')?.value?.trim().toUpperCase();
+    const reason = tr.querySelectorAll('input')[1]?.value?.trim() || '';
+    const curr   = tr.querySelector('select')?.value || 'both';
+    if (ticker && (curr === 'both' || curr === currency)) {
+      map[ticker] = reason;
+    }
+  });
+  return map;
+}
+
+// ════════════════════════════════════════════════════════
+// UI HELPERS
+// ════════════════════════════════════════════════════════
+function updateRunButton() {
+  const hasFile = state.usd || state.eur;
+  document.getElementById('btn-run').disabled = !hasFile;
+  document.getElementById('run-note').textContent = hasFile
+    ? (state.usd && state.eur ? 'USD + EUR 파일 모두 준비됨'
+        : state.usd ? 'USD 파일만 업로드됨 (EUR 없이 실행 가능)'
+        : 'EUR 파일만 업로드됨 (USD 없이 실행 가능)')
+    : 'USD 또는 EUR 파일을 먼저 업로드해주세요.';
+}
+
+function setProgress(pct, label) {
+  document.getElementById('progress-bar').style.width = pct + '%';
+  document.getElementById('progress-label').textContent = label;
+}
+
+function showError(msg) {
+  document.getElementById('error-box').innerHTML =
+    `<div class="error-box">⚠️ ${msg}</div>`;
+}
+
+function setStep(n) {
+  for (let i = 1; i <= 4; i++) {
+    const el = document.getElementById(`si-${i}`);
+    el.classList.remove('active','done');
+    if (i < n) el.classList.add('done');
+    else if (i === n) el.classList.add('active');
+  }
+}
+
+// ════════════════════════════════════════════════════════
+// CORE PIPELINE
+// ════════════════════════════════════════════════════════
+function tickerAgg(rows) {
+  const map = {};
+  rows.forEach(r => {
+    const t = String(r['Ticker'] || '').trim();
+    if (!t) return;
+    if (!map[t]) {
+      map[t] = {
+        ticker:    t,
+        name:      r['Issuer Name']    || '',
+        currency:  r['Currency']       || '',
+        bclass1:   r['BCLASS Level 1'] || '',
+        bclass2:   r['BCLASS Level 2'] || '',
+        bclass3:   r['BCLASS Level 3'] || '',
+        bclass4:   r['BCLASS Level 4'] || '',
+        amt:       0,
+        count:     0,
+        bbg:       r['BBG Composite']  || '',
+        country:   r['Cntry of Risk']  || '',
+        industry:  r['Issuer Industry']|| '',
+      };
+    }
+    const amt = parseFloat(r['Amt Issued']) || 0;
+    map[t].amt   += amt;
+    map[t].count += 1;
+    if (!map[t].bbg && r['BBG Composite']) map[t].bbg = r['BBG Composite'];
+  });
+  return Object.values(map);
+}
+
+function calcBottom20(tickers, pct) {
+  const threshold = pct / 100;
+  const sectorMap = {};
+  tickers.forEach(t => {
+    const key = `${t.bclass1}|${t.bclass2}|${t.bclass3}`;
+    if (!sectorMap[key]) sectorMap[key] = [];
+    sectorMap[key].push(t);
+  });
+  const bottom = new Set();
+  Object.values(sectorMap).forEach(group => {
+    const sorted = [...group].sort((a,b) => a.amt - b.amt);
+    const n = sorted.length;
+    sorted.forEach((t, i) => {
+      // min rank / n < threshold
+      // find min rank: first index with same amt
+      let minRank = i;
+      while (minRank > 0 && sorted[minRank-1].amt === t.amt) minRank--;
+      const relRank = (minRank) / n;  // 0-indexed: rank 0 = first
+      // match Python: rank_min (1-indexed) / sector_size < 0.2
+      const relRank1 = (minRank + 1) / n;
+      if (relRank1 < threshold) bottom.add(t.ticker);
+    });
+  });
+  return bottom;
+}
+
+function runPipeline(data, currency) {
+  const pct = parseFloat(document.getElementById('pct-input').value) || 20;
+  const excMap = getExceptionMap(currency.toLowerCase());
+  const excSet = new Set(Object.keys(excMap));
+
+  const { raw, esg, china, bank } = data;
+  const steps = {};
+
+  // Step 6
+  const df6 = raw.filter(r => String(r['Cntry of Risk']).trim() !== 'KR');
+  const t6   = tickerAgg(df6);
+
+  // Step 12 pre-calc (Step6 기준)
+  const bottom20 = calcBottom20(t6, pct);
+
+  // 누적 제외 ticker (종목 수 계산용)
+  const exclAccum = new Set();
+
+  function bondsAfter() {
+    return df6.filter(r => !exclAccum.has(String(r['Ticker']||'').trim())).length;
+  }
+
+  // Step 7
+  const [t7, e7] = partition(t6, r =>
+    r.count > 1 || r.bclass1 === 'Municipals' || excSet.has(r.ticker));
+  e7.forEach(r => exclAccum.add(r.ticker));
+  steps[7] = { excl: e7, after: t7, bondsAfter: bondsAfter() };
+
+  // Step 8
+  const [t8, e8] = partition(t7, r => !esg.has(r.ticker) || excSet.has(r.ticker));
+  e8.forEach(r => exclAccum.add(r.ticker));
+  steps[8] = { excl: e8, after: t8, bondsAfter: bondsAfter() };
+
+  // Step 9
+  const [t9, e9] = partition(t8, r => !china.has(r.ticker) || excSet.has(r.ticker));
+  e9.forEach(r => exclAccum.add(r.ticker));
+  steps[9] = { excl: e9, after: t9, bondsAfter: bondsAfter() };
+
+  // Step 10
+  const [t10, e10] = partition(t9, r => !bank.has(r.ticker) || excSet.has(r.ticker));
+  e10.forEach(r => exclAccum.add(r.ticker));
+  steps[10] = { excl: e10, after: t10, bondsAfter: bondsAfter() };
+
+  // Step 11
+  const [t11, e11] = partition(t10, r => r.bclass3 !== 'Other Financial' || excSet.has(r.ticker));
+  e11.forEach(r => exclAccum.add(r.ticker));
+  steps[11] = { excl: e11, after: t11, bondsAfter: bondsAfter() };
+
+  // Step 12
+  const [t12, e12] = partition(t11, r => !bottom20.has(r.ticker) || excSet.has(r.ticker));
+  e12.forEach(r => exclAccum.add(r.ticker));
+  steps[12] = { excl: e12, after: t12, bondsAfter: bondsAfter() };
+
+  return { raw, df6, t6, steps, finalPool: t12, bottom20, excMap, excSet,
+           nRaw: raw.length, nT6: t6.length };
+}
+
+function partition(arr, predicate) {
+  const pass = [], fail = [];
+  arr.forEach(r => (predicate(r) ? pass : fail).push(r));
+  return [pass, fail];
+}
+
+// ════════════════════════════════════════════════════════
+// MAIN RUN
+// ════════════════════════════════════════════════════════
+async function runAll() {
+  document.getElementById('error-box').innerHTML = '';
+  document.getElementById('progress-wrap').style.display = 'block';
+  document.getElementById('btn-run').disabled = true;
+  setStep(3);
+
+  resultData = {};
+
+  const currencies = [];
+  if (state.usd) currencies.push('USD');
+  if (state.eur) currencies.push('EUR');
+
+  try {
+    for (let ci = 0; ci < currencies.length; ci++) {
+      const currency = currencies[ci];
+      setProgress(ci * 50 + 5, `${currency} 데이터 처리 중...`);
+      await sleep(30);
+
+      const result = runPipeline(state[currency.toLowerCase()], currency);
+      resultData[currency] = result;
+
+      setProgress(ci * 50 + 45, `${currency} 완료 — ${result.finalPool.length}개 이슈어`);
+      await sleep(30);
+    }
+
+    setProgress(100, '완료');
+    await sleep(200);
+
+    renderResults();
+    document.getElementById('results').style.display = 'block';
+    document.getElementById('results').scrollIntoView({ behavior: 'smooth' });
+    setStep(4);
+  } catch(err) {
+    showError(`처리 오류: ${err.message}`);
+    console.error(err);
+  }
+
+  document.getElementById('progress-wrap').style.display = 'none';
+  document.getElementById('btn-run').disabled = false;
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ════════════════════════════════════════════════════════
+// RENDER RESULTS
+// ════════════════════════════════════════════════════════
+function renderResults() {
+  const tabsEl   = document.getElementById('results-tabs');
+  const panelsEl = document.getElementById('results-panels');
+  tabsEl.innerHTML = '';
+  panelsEl.innerHTML = '';
+
+  const currencies = Object.keys(resultData);
+  currencies.forEach((cur, idx) => {
+    // Tab button
+    const btn = document.createElement('button');
+    btn.className = 'tab-btn' + (idx === 0 ? ' active' : '');
+    btn.textContent = `${cur} (${resultData[cur].finalPool.length}개)`;
+    btn.onclick = () => switchTab(cur);
+    tabsEl.appendChild(btn);
+
+    // Panel
+    const panel = document.createElement('div');
+    panel.className = 'tab-content' + (idx === 0 ? ' active' : '');
+    panel.id = `panel-${cur}`;
+    panel.innerHTML = buildPanel(cur, resultData[cur]);
+    panelsEl.appendChild(panel);
+  });
+
+  // Download section
+  const dlDiv = document.createElement('div');
+  dlDiv.style.cssText = 'padding:20px;border-top:1px solid var(--gray-200);margin-top:4px';
+  dlDiv.innerHTML = `
+    <div style="font-size:12px;font-weight:700;color:var(--navy);margin-bottom:12px">📥 결과 파일 다운로드</div>
+    <div class="dl-grid">
+      ${resultData.USD ? `<button class="btn-dl usd" onclick="downloadExcel('USD')">
+        <span class="dl-icon">⬇</span>
+        <div class="dl-info">USD 결과 다운로드<span class="dl-sub">${resultData.USD.finalPool.length}개 이슈어 · 단계별 제외내역 포함</span></div>
+      </button>` : `<button class="btn-dl usd" disabled>
+        <span class="dl-icon">⬇</span><div class="dl-info">USD 파일 없음</div></button>`}
+      ${resultData.EUR ? `<button class="btn-dl eur" onclick="downloadExcel('EUR')">
+        <span class="dl-icon">⬇</span>
+        <div class="dl-info">EUR 결과 다운로드<span class="dl-sub">${resultData.EUR.finalPool.length}개 이슈어 · 단계별 제외내역 포함</span></div>
+      </button>` : `<button class="btn-dl eur" disabled>
+        <span class="dl-icon">⬇</span><div class="dl-info">EUR 파일 없음</div></button>`}
+    </div>
+  `;
+  panelsEl.appendChild(dlDiv);
+}
+
+function switchTab(cur) {
+  document.querySelectorAll('.tab-btn').forEach((b,i) => {
+    b.classList.toggle('active', Object.keys(resultData)[i] === cur);
+  });
+  document.querySelectorAll('.tab-content').forEach(p => {
+    p.classList.toggle('active', p.id === `panel-${cur}`);
+  });
+}
+
+function buildPanel(currency, result) {
+  const { raw, df6, t6, steps, finalPool, bottom20, excMap, excSet, nRaw, nT6 } = result;
+  const pct = parseFloat(document.getElementById('pct-input').value) || 20;
+
+  // 누적 종목 제외 계산
+  const exclAccum = new Set();
+  const bondsAfterCalc = (stepExcls) => {
+    stepExcls.forEach(r => exclAccum.add(r.ticker));
+    return df6.filter(r => !exclAccum.has(String(r['Ticker']||'').trim())).length;
+  };
+
+  const summaryRows = [
+    { step:'#6',  desc:'KP물 제외 (Cntry of Risk = KR)',
+      before: raw.length, excl: nRaw - nT6, after: nT6,
+      bondsAfter: df6.length, note:'' },
+    { step:'#7',  desc:'발행건수 1건 이슈어 제외 (지방채 예외)',
+      before: nT6, excl: steps[7].excl.length, after: steps[7].after.length,
+      bondsAfter: steps[7].bondsAfter, note: excSet.size ? `예외포함 ${excSet.size}개` : '' },
+    { step:'#8',  desc:'ESG 제한업종 이슈어 제외',
+      before: steps[7].after.length, excl: steps[8].excl.length, after: steps[8].after.length,
+      bondsAfter: steps[8].bondsAfter, note:'' },
+    { step:'#9',  desc:'중국 지방정부 채권 제외',
+      before: steps[8].after.length, excl: steps[9].excl.length, after: steps[9].after.length,
+      bondsAfter: steps[9].bondsAfter, note:'' },
+    { step:'#10', desc:'미국 지역은행 제외',
+      before: steps[9].after.length, excl: steps[10].excl.length, after: steps[10].after.length,
+      bondsAfter: steps[10].bondsAfter, note:'' },
+    { step:'#11', desc:'Other Financial 섹터 제외 (BCLASS3)',
+      before: steps[10].after.length, excl: steps[11].excl.length, after: steps[11].after.length,
+      bondsAfter: steps[11].bondsAfter, note:'' },
+    { step:'#12', desc:`섹터별 발행금액 하위 ${pct}% 제외 (BCLASS1·2·3 기준)`,
+      before: steps[11].after.length, excl: steps[12].excl.length, after: steps[12].after.length,
+      bondsAfter: steps[12].bondsAfter, note:`Step6 기준 하위${pct}%: ${bottom20.size}개` },
+    { step:'#13', desc:'투자불가 은행 제외 (현재 미사용)',
+      before: finalPool.length, excl: 0, after: finalPool.length,
+      bondsAfter: steps[12].bondsAfter, note:'명목 유지' },
+  ];
+
+  const summaryHtml = `
+    <table class="summary-table">
+      <thead><tr>
+        <th style="width:48px">단계</th>
+        <th>필터링 내용</th>
+        <th style="width:90px">적용 전<br>이슈어</th>
+        <th style="width:80px">제외<br>이슈어</th>
+        <th style="width:90px">적용 후<br>이슈어</th>
+        <th style="width:80px">적용 후<br>종목 수</th>
+        <th style="width:130px">비고</th>
+      </tr></thead>
+      <tbody>
+        ${summaryRows.map((r,i) => `
+          <tr>
+            <td class="step-col">${r.step}</td>
+            <td>${r.desc}</td>
+            <td class="num-val">${r.before.toLocaleString()}</td>
+            <td class="${r.excl > 0 ? 'excl-val' : 'num-val'}">${r.excl > 0 ? r.excl.toLocaleString() : '—'}</td>
+            <td class="num-val">${r.after.toLocaleString()}</td>
+            <td class="num-val">${r.bondsAfter.toLocaleString()}</td>
+            <td style="font-size:10px;color:var(--gray-500)">${r.note}</td>
+          </tr>`).join('')}
+        <tr class="final-row">
+          <td colspan="2">최종 투자 POOL (${currency})</td>
+          <td colspan="3">${finalPool.length.toLocaleString()} 이슈어</td>
+          <td>${steps[12].bondsAfter.toLocaleString()} 종목</td>
+          <td>${excSet.size ? `예외포함 ${excSet.size}개` : ''}</td>
+        </tr>
+      </tbody>
+    </table>`;
+
+  // Pool table
+  const poolHtml = `
+    <div class="pool-header">
+      <div class="pool-count">${finalPool.length.toLocaleString()} <span>이슈어</span>
+        ${excSet.size ? `<span style="font-size:10px;color:var(--amber);background:var(--amber);color:#7F6000;border:1px solid #E6C619;padding:1px 7px;border-radius:3px;margin-left:8px">예외포함 ${excSet.size}개</span>` : ''}
+      </div>
+      <input class="pool-search" type="text" placeholder="Ticker / 이슈어명 검색" oninput="filterPool(this,'pool-${currency}')">
+    </div>
+    <div class="data-table-wrap">
+      <table class="data-table" id="pool-${currency}">
+        <thead><tr>
+          <th>Ticker</th><th>Issuer Name</th><th>BCLASS 1</th><th>BCLASS 3</th>
+          <th>발행금액</th><th>발행수</th><th>BBG</th><th>국가</th>
+        </tr></thead>
+        <tbody>
+          ${finalPool.sort((a,b)=>a.ticker.localeCompare(b.ticker)).map(r => {
+            const isExc = excSet.has(r.ticker);
+            return `<tr class="${isExc?'exc-row':''}">
+              <td class="ticker-cell">${r.ticker}${isExc?`<span class="exc-badge">예외</span>`:''}</td>
+              <td>${r.name}</td>
+              <td>${r.bclass1}</td>
+              <td>${r.bclass3}</td>
+              <td class="amt-cell">${r.amt ? r.amt.toLocaleString() : '—'}</td>
+              <td class="cnt-cell">${r.count}</td>
+              <td>${r.bbg}</td>
+              <td>${r.country}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>`;
+
+  // Step12 detail table
+  const step12Html = `
+    <div style="padding:12px 16px;background:var(--gray-50);border-bottom:1px solid var(--gray-200);font-size:11px;color:var(--gray-700)">
+      전체 <b>${t6.length.toLocaleString()}</b>개 이슈어 중
+      하위${pct}%: <b style="color:var(--red)">${bottom20.size}개</b>  /
+      Step7~11 통과 후 실제 제외: <b style="color:var(--red)">${steps[12].excl.length}개</b>  /
+      이미 이전 단계 제외: <b style="color:var(--gray-500)">${bottom20.size - steps[12].excl.length}개</b>
+    </div>
+    <div class="data-table-wrap">
+      <table class="data-table">
+        <thead><tr>
+          <th>Ticker</th><th>Issuer Name</th>
+          <th>BCLASS 1</th><th>BCLASS 2</th><th>BCLASS 3</th>
+          <th>발행금액</th><th>발행수</th><th>BBG</th><th>국가</th><th>하위${pct}% 구분</th>
+        </tr></thead>
+        <tbody>
+          ${[...t6].sort((a,b)=>{
+              const cmp = (a.bclass1||'').localeCompare(b.bclass1||'') ||
+                          (a.bclass2||'').localeCompare(b.bclass2||'') ||
+                          (a.bclass3||'').localeCompare(b.bclass3||'');
+              if (cmp !== 0) return cmp;
+              return a.amt - b.amt;
+            }).map(r => {
+              const inBot = bottom20.has(r.ticker);
+              const realExcl = steps[12].excl.find(e => e.ticker === r.ticker);
+              let bgStyle = '';
+              let flagHtml = '';
+              if (realExcl) {
+                bgStyle = 'background:#F4B183';
+                flagHtml = '<span style="color:var(--red);font-weight:700">● 제외</span>';
+              } else if (inBot) {
+                bgStyle = 'background:var(--red-light)';
+                flagHtml = '<span style="color:#9C5700">○ 하위'+pct+'% (기제외)</span>';
+              }
+              return `<tr style="${bgStyle}">
+                <td class="ticker-cell" style="${realExcl?'color:var(--red)':''}">${r.ticker}</td>
+                <td>${r.name}</td>
+                <td>${r.bclass1}</td><td>${r.bclass2}</td><td>${r.bclass3}</td>
+                <td class="amt-cell">${r.amt?r.amt.toLocaleString():'—'}</td>
+                <td class="cnt-cell">${r.count}</td>
+                <td>${r.bbg}</td><td>${r.country}</td>
+                <td style="font-size:11px;text-align:center">${flagHtml}</td>
+              </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>`;
+
+  return `
+    <div style="padding:0 0 16px">
+      <!-- Summary -->
+      <div style="padding:16px 20px 8px;font-size:11px;font-weight:700;color:var(--navy)">필터링 요약</div>
+      <div style="padding:0 20px 16px">${summaryHtml}</div>
+
+      <!-- Pool sub-tabs -->
+      <div style="padding:0 20px 8px;font-size:11px;font-weight:700;color:var(--navy)">최종 투자 POOL</div>
+      <div style="margin:0 20px 16px;border:1px solid var(--gray-200);border-radius:6px;overflow:hidden">${poolHtml}</div>
+
+      <!-- Step 12 detail -->
+      <div style="padding:0 20px 8px;font-size:11px;font-weight:700;color:var(--navy)">#12 섹터별 발행금액 하위 ${pct}% 상세</div>
+      <div style="margin:0 20px 16px;border:1px solid var(--gray-200);border-radius:6px;overflow:hidden">${step12Html}</div>
+    </div>`;
+}
+
+function filterPool(input, tableId) {
+  const q = input.value.trim().toLowerCase();
+  const rows = document.querySelectorAll(`#${tableId} tbody tr`);
+  rows.forEach(tr => {
+    const text = tr.textContent.toLowerCase();
+    tr.style.display = text.includes(q) ? '' : 'none';
+  });
+}
+
+// ════════════════════════════════════════════════════════
+// EXCEL EXPORT
+// ════════════════════════════════════════════════════════
+function downloadExcel(currency) {
+  const result = resultData[currency];
+  if (!result) return;
+
+  const { raw, df6, t6, steps, finalPool, bottom20, excMap, excSet, nRaw, nT6 } = result;
+  const pct = parseFloat(document.getElementById('pct-input').value) || 20;
+  const wb = XLSX.utils.book_new();
+
+  const POOL_HDR = ['Ticker','Issuer Name','통화','BCLASS 1','BCLASS 2','BCLASS 3','BCLASS 4',
+                    '발행금액','발행 수','BBG composite','국가','업종'];
+
+  function toRow(r, excReason) {
+    const base = [r.ticker,r.name,r.currency,r.bclass1,r.bclass2,r.bclass3,r.bclass4,
+                  r.amt,r.count,r.bbg,r.country,r.industry];
+    return excReason !== undefined ? [...base, excReason] : base;
+  }
+
+  // 1. 필터링 요약
+  const summaryData = [
+    ['단계','필터링 내용','적용 전 이슈어','제외 이슈어','적용 후 이슈어','적용 후 종목 수','비고'],
+    ['#6','KP물 제외 (Cntry of Risk = KR)', nRaw, nRaw-nT6, nT6, df6.length, ''],
+    ['#7','발행건수 1건 이슈어 제외 (지방채 예외)', nT6, steps[7].excl.length, steps[7].after.length, steps[7].bondsAfter, excSet.size?`예외포함 ${excSet.size}개`:''],
+    ['#8','ESG 제한업종 이슈어 제외', steps[7].after.length, steps[8].excl.length, steps[8].after.length, steps[8].bondsAfter, ''],
+    ['#9','중국 지방정부 채권 제외', steps[8].after.length, steps[9].excl.length, steps[9].after.length, steps[9].bondsAfter, ''],
+    ['#10','미국 지역은행 제외', steps[9].after.length, steps[10].excl.length, steps[10].after.length, steps[10].bondsAfter, ''],
+    ['#11','Other Financial 섹터 제외 (BCLASS3)', steps[10].after.length, steps[11].excl.length, steps[11].after.length, steps[11].bondsAfter, ''],
+    [`#12`,`섹터별 발행금액 하위 ${pct}% 제외 (BCLASS1·2·3 기준)`, steps[11].after.length, steps[12].excl.length, steps[12].after.length, steps[12].bondsAfter, `Step6 기준 하위${pct}%: ${bottom20.size}개`],
+    ['#13','투자불가 은행 제외 (현재 미사용)', finalPool.length, 0, finalPool.length, steps[12].bondsAfter, '명목 유지'],
+    [],
+    [`최종 투자 POOL (${currency})`, '', '', '', finalPool.length+'개 이슈어', steps[12].bondsAfter+'종목', excSet.size?`예외포함 ${excSet.size}개`:''],
+  ];
+  if (excSet.size) {
+    summaryData.push([]);
+    summaryData.push(['※ 예외 포함 이슈어: ' + [...excSet].sort().join(', ')]);
+  }
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summaryData), '필터링 요약');
+
+  // 2. 최종 POOL
+  const poolRows = [POOL_HDR.concat(['예외 포함 사유']),
+    ...finalPool.sort((a,b)=>a.ticker.localeCompare(b.ticker))
+      .map(r => toRow(r, excMap[r.ticker] || ''))];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(poolRows), `${currency}_POOL`);
+
+  // 3~7. 단계별 제외 시트
+  const stepLabels = {
+    7: '#7 발행건수1건제외', 8: '#8 ESG제외',
+    9: '#9 중국지방정부제외', 10: '#10 지역은행제외', 11: '#11 OtherFin제외'
+  };
+  Object.entries(stepLabels).forEach(([step, name]) => {
+    const rows = [POOL_HDR, ...steps[step].excl.map(r => toRow(r))];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), `${currency}_${name.substring(0,12)}`);
+  });
+
+  // 8. #12 상세
+  const step12Rows = [
+    [...POOL_HDR, `하위${pct}% 구분`],
+    ...[...t6].sort((a,b) => {
+      const c = (a.bclass1||'').localeCompare(b.bclass1||'') ||
+                (a.bclass2||'').localeCompare(b.bclass2||'') ||
+                (a.bclass3||'').localeCompare(b.bclass3||'');
+      return c !== 0 ? c : a.amt - b.amt;
+    }).map(r => {
+      const isReal = steps[12].excl.find(e => e.ticker === r.ticker);
+      const inBot  = bottom20.has(r.ticker);
+      const flag   = isReal ? `● 제외` : inBot ? `○ 하위${pct}% (기제외)` : '';
+      return [...toRow(r), flag];
+    })
+  ];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(step12Rows), `${currency}_#12발행금액하위`);
+
+  const today = new Date();
+  const dateStr = `${today.getFullYear()}${String(today.getMonth()+1).padStart(2,'0')}${String(today.getDate()).padStart(2,'0')}`;
+  XLSX.writeFile(wb, `투자POOL_${currency}_${dateStr}.xlsx`);
+}
+</script>
+</body>
+</html>
