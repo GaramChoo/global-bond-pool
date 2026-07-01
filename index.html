@@ -632,11 +632,8 @@ function handleRawUpload(input) {
   reader.onload = e => {
     try {
       const wb = XLSX.read(e.target.result, {type:'array'});
-      if (!wb.SheetNames.includes('전체목록')) {
-        showError(`'전체목록' 시트를 찾을 수 없습니다. (${file.name})`);
-        return;
-      }
-      const rows = XLSX.utils.sheet_to_json(wb.Sheets['전체목록'], {defval:''});
+      const firstSheetName = wb.SheetNames[0];
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[firstSheetName], {defval:''});
       const keepExceptions = Object.entries(getExceptionMap()); // 새 raw 업로드해도 예외 목록은 유지
       pipeline[currency] = freshPipeline();
       pipeline[currency].rawLoaded = true;
@@ -645,9 +642,9 @@ function handleRawUpload(input) {
 
       const zone = document.getElementById('upload-raw');
       zone.classList.add('loaded');
-      addLabel(zone, `✓ ${file.name}<br><span style="font-size:9px">${rows.length.toLocaleString()}건 로드됨</span>`);
+      addLabel(zone, `✓ ${file.name}<br><span style="font-size:9px">${rows.length.toLocaleString()}건 로드됨 (시트: ${firstSheetName})</span>`);
       document.getElementById('upload-status').innerHTML =
-        `<div class="notice">✅ 전체목록 ${rows.length.toLocaleString()}건 로드 완료. 아래 Step 6부터 순서대로 진행해주세요.</div>`;
+        `<div class="notice">✅ ${rows.length.toLocaleString()}건 로드 완료 (시트: <b>${firstSheetName}</b>). 아래 Step 6부터 순서대로 진행해주세요.</div>`;
       renderFromState();
     } catch(err) {
       showError('파일 로드 오류: ' + err.message);
