@@ -1152,34 +1152,16 @@ function downloadFinal() {
 
   const wb = XLSX.utils.book_new();
 
-  // 예외 Ticker가 어느 단계에서 제외됐는지 찾는다.
-  // - 6번에서 제외된 경우(KR)는 통상 발생하지 않지만 방어적으로 포함
-  // - 어느 step에서도 못 찾으면(raw data에 아예 없는 OLOD 같은 케이스) null 반환
+  // 예외 Ticker가 어느 단계에서 제외됐는지 찾는다 (단계별 제외 시트에서 삭제 및 Step6 시트용)
   function findExclusionStep(ticker) {
     for (const s of [6,7,8,9,10,11,12]) {
       const sr = p.stepResults[s];
       if (sr && sr.excl.some(r => r.ticker === ticker)) return s;
     }
-    return null; // raw data 자체에 없는 경우
+    return null;
   }
 
-  // 단계별로, 그 단계(포함) 이후 적용해야 할 예외 이슈어 수 / 종목 수 보정치를 계산
-  const retroIssuerAdd = {7:0,8:0,9:0,10:0,11:0,12:0};
-  const retroBondAdd   = {7:0,8:0,9:0,10:0,11:0,12:0};
-  excSet.forEach(t => {
-    const exStep = findExclusionStep(t);
-    if (exStep === null) return; // raw data에 없는 Ticker는 중간 단계 소급 생략, 최종 POOL에만 반영
-    const t6Row = p.t6.find(r => r.ticker === t);
-    const bondCount = t6Row ? t6Row.count : 0;
-    [7,8,9,10,11,12].forEach(s => {
-      if (s >= exStep) {
-        retroIssuerAdd[s] += 1;
-        retroBondAdd[s]   += bondCount;
-      }
-    });
-  });
-
-  // 1. 필터링 요약
+  // 1. 필터링 요약 — 순수 규칙 기반 숫자만 (예외 add-back 없음)
   const s6 = p.stepResults[6];
   const summaryRows = [
     ['단계','필터링 내용','적용 전 이슈어','제외 이슈어','적용 후 이슈어','적용 후 종목 수','비고'],
@@ -1187,23 +1169,15 @@ function downloadFinal() {
   ];
   [7,8,9,10,11,12].forEach(s => {
     const r = p.stepResults[s];
-    const adjIssuer = r.after.length + retroIssuerAdd[s];
-    const adjBonds  = r.bondsAfter + retroBondAdd[s];
     let note = '';
-    if (retroIssuerAdd[s] > 0) note = `예외 ${retroIssuerAdd[s]}개 add-back 반영`;
-    if (s===12) note += (note?' / ':'') + `Step6 기준 하위20%: ${p.bottom20.size}개`;
-    if (s===13) note = '명목 유지';
-    summaryRows.push([`#${s}`, stepLabel(s), r.before, r.excl.length, adjIssuer, adjBonds, note]);
+    if (s===12) note = `Step6 기준 하위20%: ${p.bottom20.size}개`;
+    summaryRows.push([`#${s}`, stepLabel(s), r.before, r.excl.length, r.after.length, r.bondsAfter, note]);
   });
   summaryRows.push([]);
-  summaryRows.push([`최종 투자 POOL (${currency})`,'','','', p.finalPool.length+'개 이슈어', p.stepResults[12].bondsAfter+retroBondAdd[12]+'종목', excSet.size?`예외포함 ${excSet.size}개`:'']);
+  summaryRows.push([`최종 투자 POOL (${currency})`,'','','', p.finalPool.length+'개 이슈어', p.stepResults[12].bondsAfter+'종목', excSet.size?`예외포함 ${excSet.size}개`:'']);
   if (excSet.size) {
     summaryRows.push([]);
-    summaryRows.push(['※ 예외 포함 이슈어: ' + [...excSet].sort().join(', ')]);
-    const noRawList = [...excSet].filter(t => findExclusionStep(t) === null);
-    if (noRawList.length) {
-      summaryRows.push([`※ 이 중 raw data에 없어 중간 단계 수치에는 반영되지 않고 최종 POOL에만 추가된 이슈어: ` + noRawList.sort().join(', ')]);
-    }
+    summaryRows.push(['※ 예외 포함 이슈어 (최종 POOL 시트 하단 참조): ' + [...excSet].sort().join(', ')]);
   }
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summaryRows), '필터링 요약');
 
@@ -1222,27 +1196,66 @@ function downloadFinal() {
     })];
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(poolRows), `${currency}_POOL`);
 
-  // 3. 단계별 제외 시트
+  // 3. 단계별 제외 시트 — Ticker 오름차순 + 예외 복귀 이슈어는 제외 시트에서 삭제
   const labels = {7:'#7발행건수1건',8:'#8ESG제외',9:'#9중국지방정부',10:'#10지역은행',11:'#11OtherFin'};
   Object.entries(labels).forEach(([s,name]) => {
-    const rows = [HDR, ...p.stepResults[s].excl.map(toRow)];
+    const sorted = [...p.stepResults[s].excl]
+      .filter(r => !excSet.has(r.ticker))   // 예외로 복귀한 이슈어는 제외 시트에서 삭제
+      .sort((a,b) => a.ticker.localeCompare(b.ticker));
+    const rows = [HDR, ...sorted.map(toRow)];
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), `${currency}_${name}`);
   });
 
-  // 4. #12 상세 (전체 BCLASS 정렬 + 하위20% 강조 플래그)
+  // 4. #12 시트 — 하위20% Ticker만, 실제제외/기제외 구분 (개선 2)
+  const bottom20Only = [...p.t6]
+    .filter(r => p.bottom20.has(r.ticker))
+    .sort((a,b) => {
+      // BCLASS1→2→3→발행금액 오름차순 (섹터 내 순서 파악 용이)
+      return (a.bclass1||'').localeCompare(b.bclass1||'') ||
+             (a.bclass2||'').localeCompare(b.bclass2||'') ||
+             (a.bclass3||'').localeCompare(b.bclass3||'') ||
+             a.amt - b.amt;
+    });
+  const realExclSet12 = new Set(p.stepResults[12].excl.map(r=>r.ticker));
   const step12Rows = [
     [...HDR, '하위20% 구분'],
-    ...[...p.t6].sort((a,b)=>{
-        const c = (a.bclass1||'').localeCompare(b.bclass1||'') || (a.bclass2||'').localeCompare(b.bclass2||'') || (a.bclass3||'').localeCompare(b.bclass3||'');
-        return c!==0?c:a.amt-b.amt;
-      }).map(r => {
-        const isReal = p.stepResults[12].excl.find(e=>e.ticker===r.ticker);
-        const inBot = p.bottom20.has(r.ticker);
-        const flag = isReal ? '● 제외' : inBot ? '○ 하위20% (기제외)' : '';
-        return [...toRow(r), flag];
-      })
+    ...bottom20Only.map(r => {
+      const flag = realExclSet12.has(r.ticker) ? '● #12 필터로 제외' : '○ 기제외 (Step7~11에서 먼저 제외됨)';
+      return [...toRow(r), flag];
+    })
   ];
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(step12Rows), `${currency}_#12발행금액하위`);
+
+  // 5. Step6 전체 이슈어 목록 + 각 이슈어의 최종 처리 결과 (개선 3)
+  // 어느 단계에서 제외됐는지, 최종 POOL에 포함됐는지, 예외 포함인지 추적
+  const finalPoolTickers = new Set(p.finalPool.map(r => r.ticker));
+  const exclStepMap = {};  // ticker → 제외된 step 번호
+  [7,8,9,10,11,12].forEach(s => {
+    p.stepResults[s].excl.forEach(r => {
+      if (!exclStepMap[r.ticker]) exclStepMap[r.ticker] = s;
+    });
+  });
+  const step6Sorted = [...p.t6].sort((a,b) => a.ticker.localeCompare(b.ticker));
+  const step6Rows = [
+    [...HDR, '최종 POOL 포함 여부', '제외 필터', '비고'],
+    ...step6Sorted.map(r => {
+      const inPool = finalPoolTickers.has(r.ticker);
+      const isExc  = excSet.has(r.ticker);
+      const exclStep = exclStepMap[r.ticker];
+      let poolYN = inPool ? '✔ 포함' : '✘ 미포함';
+      let filterCol = '';
+      let note = '';
+      if (inPool && isExc) {
+        // 제외 필터에 걸렸으나 예외로 복귀
+        filterCol = exclStep ? `#${exclStep} (예외로 복귀)` : '';
+        note = excMap[r.ticker] || '예외 포함';
+      } else if (!inPool && exclStep) {
+        filterCol = `#${exclStep} — ${stepLabel(exclStep)}`;
+      }
+      return [...toRow(r), poolYN, filterCol, note];
+    })
+  ];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(step6Rows), `${currency}_Step6전체이슈어`);
 
   XLSX.writeFile(wb, `투자POOL_${currency}_${dateStr()}.xlsx`);
 }
