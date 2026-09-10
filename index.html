@@ -354,6 +354,7 @@
   <div class="final-card" id="final-card">
     <div class="label">최종 투자 POOL</div>
     <div class="count" id="final-count">—</div>
+    <div id="final-name-count" style="font-size:13px;font-weight:600;color:#2E6DA4;margin:2px 0 0;letter-spacing:0.01em"></div>
     <div class="sub" id="final-sub"></div>
     <button class="btn btn-dl" onclick="downloadFinal()">⬇ 최종 결과 Excel 다운로드 (전 단계 시트 포함)</button>
   </div>
@@ -1015,11 +1016,7 @@ function applyExceptions() {
   p.finalPool = newPool;
   p.exceptionsApplied = true;
 
-  const statusEl = document.getElementById('exc-apply-status');
-  statusEl.innerHTML = `✅ 예외 적용 완료 — 최종 POOL: <b>${newPool.length.toLocaleString()}개</b> (예외로 추가된 이슈어: ${excTickers.length}개)`;
-  statusEl.style.display = 'block';
-
-  showFinal();
+  showFinal();  // 카운트(Ticker/Issuer Name) 및 상태 메시지를 showFinal에서 통합 처리
 }
 
 function finishStep(step, res) {
@@ -1042,8 +1039,26 @@ function finishStep(step, res) {
 function showFinal() {
   const p = P();
   if (!p.finalPool) return;
+
+  const tickerCount = p.finalPool.length;
+
+  // 최종 POOL에 속한 Ticker의 모든 Issuer Name 수를 raw data에서 집계
+  const finalTickerSet = new Set(p.finalPool.map(r => r.ticker));
+  const nameSet = new Set();
+  (p.rawRows || []).forEach(r => {
+    const t = String(r['Ticker']||'').trim();
+    const n = String(r['Issuer Name']||'').trim();
+    const cntry = String(r['Cntry of Risk']||'').trim();
+    if (cntry === 'KR') return;
+    if (finalTickerSet.has(t) && n) nameSet.add(`${t}||${n}`);
+  });
+  const nameCount = nameSet.size;
+
   document.getElementById('final-card').style.display = 'block';
-  document.getElementById('final-count').textContent = p.finalPool.length.toLocaleString() + ' 이슈어';
+  document.getElementById('final-count').textContent = tickerCount.toLocaleString() + ' 이슈어 (Ticker 기준)';
+  document.getElementById('final-name-count').textContent =
+    `▸ Issuer Name 기준: ${nameCount.toLocaleString()}개`;
+
   const excMap = getExceptionMap();
   const excSet = new Set(Object.keys(excMap));
   const excCount = p.finalPool.filter(r=>excSet.has(r.ticker)).length;
@@ -1053,7 +1068,8 @@ function showFinal() {
   // 이 통화에서 이미 예외 적용을 완료했었다면, 그 결과 메시지를 다시 보여준다.
   const statusEl = document.getElementById('exc-apply-status');
   if (p.exceptionsApplied) {
-    statusEl.innerHTML = `✅ 예외 적용 완료 — 최종 POOL: <b>${p.finalPool.length.toLocaleString()}개</b> (예외로 추가된 이슈어: ${excCount}개)`;
+    statusEl.innerHTML = `✅ 예외 적용 완료 — 최종 POOL: <b>${tickerCount.toLocaleString()}개 Ticker / ${nameCount.toLocaleString()}개 Issuer Name</b>` +
+      (excCount ? ` (예외로 추가된 이슈어: ${excCount}개)` : '');
     statusEl.style.display = 'block';
   } else {
     statusEl.style.display = 'none';
@@ -1152,7 +1168,36 @@ function downloadFinal() {
 
   const wb = XLSX.utils.book_new();
 
-  // 예외 Ticker가 어느 단계에서 제외됐는지 찾는다 (단계별 제외 시트에서 삭제 및 Step6 시트용)
+  // ── raw data에서 Ticker+Issuer Name 기준 재집계 (POOL·Step6 펼치기용) ───
+  // p.rawRows: KR 제외 전 원본. df6(KR 제외 후)을 기준으로 재집계
+  const rawMap = {};   // key: "Ticker|Issuer Name" → 집계 행
+  p.rawRows.forEach(r => {
+    const t = String(r['Ticker']||'').trim();
+    const n = String(r['Issuer Name']||'').trim();
+    if (!t) return;
+    const cntry = String(r['Cntry of Risk']||'').trim();
+    if (cntry === 'KR') return;  // Step6(KP제외) 적용
+    const key = `${t}||${n}`;
+    if (!rawMap[key]) {
+      rawMap[key] = {
+        ticker: t, name: n,
+        currency:  String(r['Currency']      ||'').trim(),
+        bclass1:   String(r['BCLASS Level 1']||'').trim(),
+        bclass2:   String(r['BCLASS Level 2']||'').trim(),
+        bclass3:   String(r['BCLASS Level 3']||'').trim(),
+        bclass4:   String(r['BCLASS Level 4']||'').trim(),
+        amt: 0, count: 0,
+        bbg:       String(r['BBG Composite'] ||'').trim(),
+        country:   cntry,
+        industry:  String(r['Issuer Industry']||'').trim(),
+      };
+    }
+    rawMap[key].amt   += parseFloat(r['Amt Issued'])||0;
+    rawMap[key].count += 1;
+  });
+  const rawEntries = Object.values(rawMap); // Ticker+Name 단위 집계 전체
+
+  // 예외 Ticker가 어느 단계에서 제외됐는지 찾는다
   function findExclusionStep(ticker) {
     for (const s of [6,7,8,9,10,11,12]) {
       const sr = p.stepResults[s];
@@ -1161,8 +1206,13 @@ function downloadFinal() {
     return null;
   }
 
-  // 1. 필터링 요약 — 순수 규칙 기반 숫자만 (예외 add-back 없음)
+  // 1. 필터링 요약 — 순수 규칙 기반 숫자만
   const s6 = p.stepResults[6];
+  // 최종 POOL 시트는 Issuer Name 단위로 펼치므로 총 이슈어 수도 함께 표기
+  const finalPoolTickers = new Set(p.finalPool.map(r => r.ticker));
+  const finalNameCount = rawEntries.filter(r => finalPoolTickers.has(r.ticker)).length;
+  const finalTickerCount = p.finalPool.length;
+
   const summaryRows = [
     ['단계','필터링 내용','적용 전 이슈어','제외 이슈어','적용 후 이슈어','적용 후 종목 수','비고'],
     ['#6','KP물 제외 (Cntry of Risk = KR)', s6.before, s6.excl.length, s6.after.length, s6.bondsAfter, ''],
@@ -1174,48 +1224,78 @@ function downloadFinal() {
     summaryRows.push([`#${s}`, stepLabel(s), r.before, r.excl.length, r.after.length, r.bondsAfter, note]);
   });
   summaryRows.push([]);
-  summaryRows.push([`최종 투자 POOL (${currency})`,'','','', p.finalPool.length+'개 이슈어', p.stepResults[12].bondsAfter+'종목', excSet.size?`예외포함 ${excSet.size}개`:'']);
+  summaryRows.push([
+    `최종 투자 POOL (${currency})`,'','','',
+    `${finalTickerCount}개 Ticker / ${finalNameCount}개 Issuer Name`,
+    p.stepResults[12].bondsAfter+'종목',
+    excSet.size ? `예외포함 ${excSet.size}개` : '',
+  ]);
   if (excSet.size) {
     summaryRows.push([]);
     summaryRows.push(['※ 예외 포함 이슈어 (최종 POOL 시트 하단 참조): ' + [...excSet].sort().join(', ')]);
   }
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summaryRows), '필터링 요약');
 
-  // 2. 최종 POOL — 일반 이슈어는 Ticker순, 예외 포함 이슈어는 맨 아래로 모아서 정렬
+  // 2. 최종 POOL — Ticker+Issuer Name 단위로 펼치기
+  // 정렬: 일반 이슈어(Ticker → Issuer Name 순) → 예외 이슈어(맨 아래, 동일 정렬)
   const sortedPool = [...p.finalPool].sort((a, b) => {
     const aExc = a.isException ? 1 : 0;
     const bExc = b.isException ? 1 : 0;
     if (aExc !== bExc) return aExc - bExc;
     return a.ticker.localeCompare(b.ticker);
   });
-  const poolRows = [HDR.concat(['예외 포함 사유']),
-    ...sortedPool.map(r => {
-      let reason = excMap[r.ticker] || '';
-      if (r.noRawData) reason = (reason ? reason + ' / ' : '') + '(raw data 없음, 수기 추가)';
-      return [...toRow(r), reason];
-    })];
+
+  const poolRows = [
+    // 시트 상단 요약 — Ticker 수와 Issuer Name 수를 함께 표기
+    [`${currency} 투자 POOL — ${finalTickerCount.toLocaleString()}개 Ticker / ${finalNameCount.toLocaleString()}개 Issuer Name` +
+      (excSet.size ? ` (예외 포함 ${excSet.size}개)` : '')],
+    [],  // 빈 행
+    HDR.concat(['예외 포함 사유']),
+  ];
+  sortedPool.forEach(poolTicker => {
+    const t = poolTicker.ticker;
+    const isExc = poolTicker.isException;
+    let reason = excMap[t] || '';
+    if (poolTicker.noRawData) {
+      // raw data에 없는 수기 추가 이슈어 — 1행만 출력
+      if (poolTicker.noRawData) reason = (reason ? reason + ' / ' : '') + '(raw data 없음, 수기 추가)';
+      poolRows.push([t, '', poolTicker.currency, '', '', '', '', 0, 0, '', '', '', reason]);
+      return;
+    }
+    // 해당 Ticker의 모든 Issuer Name 행을 raw 재집계에서 찾아 Issuer Name 순 정렬
+    const nameRows = rawEntries
+      .filter(r => r.ticker === t)
+      .sort((a,b) => a.name.localeCompare(b.name));
+    if (nameRows.length === 0) {
+      // rawRows에서 못 찾은 경우 (예외 이슈어 등) — 기존 ticker 집계 행 그대로
+      poolRows.push([...toRow(poolTicker), reason]);
+    } else {
+      nameRows.forEach(r => {
+        poolRows.push([...toRow(r), isExc ? reason : '']);
+      });
+    }
+  });
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(poolRows), `${currency}_POOL`);
 
-  // 3. 단계별 제외 시트 — Ticker 오름차순 + 예외 복귀 이슈어는 제외 시트에서 삭제
+  // 3. 단계별 제외 시트 — Ticker 오름차순 + 예외 복귀 이슈어 삭제
   const labels = {7:'#7발행건수1건',8:'#8ESG제외',9:'#9중국지방정부',10:'#10지역은행',11:'#11OtherFin'};
   Object.entries(labels).forEach(([s,name]) => {
     const sorted = [...p.stepResults[s].excl]
-      .filter(r => !excSet.has(r.ticker))   // 예외로 복귀한 이슈어는 제외 시트에서 삭제
+      .filter(r => !excSet.has(r.ticker))
       .sort((a,b) => a.ticker.localeCompare(b.ticker));
     const rows = [HDR, ...sorted.map(toRow)];
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), `${currency}_${name}`);
   });
 
-  // 4. #12 시트 — 하위20% Ticker만, 실제제외/기제외 구분 (개선 2)
+  // 4. #12 시트 — 하위20% Ticker만, 실제제외/기제외 구분
   const bottom20Only = [...p.t6]
     .filter(r => p.bottom20.has(r.ticker))
-    .sort((a,b) => {
-      // BCLASS1→2→3→발행금액 오름차순 (섹터 내 순서 파악 용이)
-      return (a.bclass1||'').localeCompare(b.bclass1||'') ||
-             (a.bclass2||'').localeCompare(b.bclass2||'') ||
-             (a.bclass3||'').localeCompare(b.bclass3||'') ||
-             a.amt - b.amt;
-    });
+    .sort((a,b) =>
+      (a.bclass1||'').localeCompare(b.bclass1||'') ||
+      (a.bclass2||'').localeCompare(b.bclass2||'') ||
+      (a.bclass3||'').localeCompare(b.bclass3||'') ||
+      a.amt - b.amt
+    );
   const realExclSet12 = new Set(p.stepResults[12].excl.map(r=>r.ticker));
   const step12Rows = [
     [...HDR, '하위20% 구분'],
@@ -1226,29 +1306,32 @@ function downloadFinal() {
   ];
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(step12Rows), `${currency}_#12발행금액하위`);
 
-  // 5. Step6 전체 이슈어 목록 + 각 이슈어의 최종 처리 결과 (개선 3)
-  // 어느 단계에서 제외됐는지, 최종 POOL에 포함됐는지, 예외 포함인지 추적
-  const finalPoolTickers = new Set(p.finalPool.map(r => r.ticker));
-  const exclStepMap = {};  // ticker → 제외된 step 번호
+  // 5. Step6 전체 이슈어 — Issuer Name 단위로 펼치기
+  // 포함여부/제외필터는 Ticker 기준으로 판단, Issuer Name 단위로 행 확장
+  const exclStepMap = {};
   [7,8,9,10,11,12].forEach(s => {
     p.stepResults[s].excl.forEach(r => {
       if (!exclStepMap[r.ticker]) exclStepMap[r.ticker] = s;
     });
   });
-  const step6Sorted = [...p.t6].sort((a,b) => a.ticker.localeCompare(b.ticker));
+
+  // rawEntries를 Ticker → Issuer Name 순 정렬
+  const step6NameRows = [...rawEntries].sort((a,b) =>
+    a.ticker.localeCompare(b.ticker) || a.name.localeCompare(b.name)
+  );
+
   const step6Rows = [
     [...HDR, '최종 POOL 포함 여부', '제외 필터', '비고'],
-    ...step6Sorted.map(r => {
-      const inPool = finalPoolTickers.has(r.ticker);
-      const isExc  = excSet.has(r.ticker);
+    ...step6NameRows.map(r => {
+      const inPool   = finalPoolTickers.has(r.ticker);
+      const isExc    = excSet.has(r.ticker);
       const exclStep = exclStepMap[r.ticker];
-      let poolYN = inPool ? '✔ 포함' : '✘ 미포함';
-      let filterCol = '';
-      let note = '';
+      const poolYN   = inPool ? '✔ 포함' : '✘ 미포함';
+      let filterCol  = '';
+      let note       = '';
       if (inPool && isExc) {
-        // 제외 필터에 걸렸으나 예외로 복귀
         filterCol = exclStep ? `#${exclStep} (예외로 복귀)` : '';
-        note = excMap[r.ticker] || '예외 포함';
+        note      = excMap[r.ticker] || '예외 포함';
       } else if (!inPool && exclStep) {
         filterCol = `#${exclStep} — ${stepLabel(exclStep)}`;
       }
