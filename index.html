@@ -235,7 +235,9 @@
           📋 ESG Ticker 리스트 업로드
         </div>
         <button class="btn btn-primary" onclick="applyStep8()" id="btn-apply-8" disabled>✓ Step 8 적용</button>
+        <button class="btn" onclick="skipStep8()" id="btn-skip-8" style="border:1px solid #7F6000;color:#7F6000;background:#fffbf0;">⏭ 이번 분기 Skip</button>
       </div>
+      <div id="skip-8-notice" style="display:none;margin-top:8px;padding:8px 12px;background:#fff8e1;border-left:3px solid #f9a825;border-radius:4px;font-size:13px;color:#6d4c00;">⚠️ Step 8 Skip됨 — 이번 분기 ESG 필터 미적용 (개별 종목 편입 시 ESG 체크리스트로 대체)</div>
       <div id="preview-8"></div>
       <div class="result-mini" id="result-8" style="display:none"></div>
     </div>
@@ -909,6 +911,20 @@ function applyStep8() {
   const res = { before: prev.length, excl: excl.length, after: after.length, bondsAfter: bondsAfterCount(p, exclAccum) };
   p.stepResults[8] = { excl, after, before: prev.length, bondsAfter: res.bondsAfter };
   p.appliedSteps = [6,7,8];
+  document.getElementById('skip-8-notice').style.display = 'none';
+  finishStep(8, res);
+}
+
+function skipStep8() {
+  const p = P();
+  const prev = p.stepResults[7].after;
+  const after = [...prev];
+  const excl = [];
+  p.esgList = new Set(); // 빈 리스트 — 제외 없이 전체 통과
+  const res = { before: prev.length, excl: 0, after: after.length, bondsAfter: bondsAfterCount(p, getExclAccumUpTo(p, 8)) };
+  p.stepResults[8] = { excl, after, before: prev.length, bondsAfter: res.bondsAfter };
+  p.appliedSteps = [6,7,8];
+  document.getElementById('skip-8-notice').style.display = 'block';
   finishStep(8, res);
 }
 
