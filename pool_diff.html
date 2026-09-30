@@ -224,18 +224,26 @@ function loadFile(which, input) {
       }
       const currency = poolSheet.replace(/_POOL$/i,'').toUpperCase();
 
-      const raw = XLSX.utils.sheet_to_json(wb.Sheets[poolSheet], {defval:''});
+      // raw 배열로 읽어 'Ticker' 헤더 행을 동적 탐색 (제목행이 앞에 있어도 대응)
+      const rawArr = XLSX.utils.sheet_to_json(wb.Sheets[poolSheet], {header:1, defval:''});
+      const hdrIdx = rawArr.findIndex(row => row.some(c => String(c).trim() === 'Ticker'));
+      if (hdrIdx < 0) {
+        document.getElementById(`status-${which}`).textContent = '⚠ Ticker 헤더 행을 찾을 수 없습니다.';
+        return;
+      }
+      const hdr = rawArr[hdrIdx].map(c => String(c).trim());
+      const col = k => hdr.indexOf(k);
       const items = [];
-      raw.forEach(r => {
-        const ticker = String(r['Ticker']||'').trim();
-        const name   = String(r['Issuer Name']||'').trim();
-        if (!ticker || ticker.startsWith('=') || ticker === 'Ticker') return;
-        // 발행금액 컬럼명 다양성 대응
+      for (let i = hdrIdx + 1; i < rawArr.length; i++) {
+        const row = rawArr[i];
+        const ticker = String(row[col('Ticker')]||'').trim();
+        const name   = String(row[col('Issuer Name')]||'').trim();
+        if (!ticker || ticker.startsWith('=') || ticker === 'Ticker') continue;
         const amt = parseFloat(
-          r['발행금액'] || r['발행금액(USD)'] || r['발행금액(EUR)'] || 0
+          row[col('발행금액')] || row[col('발행금액(USD)')] || row[col('발행금액(EUR)')] || 0
         ) || 0;
         items.push({ticker, name, currency, amt});
-      });
+      }
 
       if (items.length === 0) {
         document.getElementById(`status-${which}`).textContent = '⚠ 데이터 행을 읽지 못했습니다.';
