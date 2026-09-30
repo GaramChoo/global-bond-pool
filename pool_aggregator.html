@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>해외채권 투자 POOL 통합 집계</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --navy:#1F4E79; --navy-mid:#2E6DA4; --navy-light:#D6E4F0;
+    --green:#375623; --green-light:#E2EFDA;
+    --gray-50:#F8F9FA; --gray-100:#F2F2F2; --gray-200:#E0E0E0; --gray-500:#888;
+    --mono:'Courier New',monospace;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:'Segoe UI',Arial,sans-serif; font-size:13px; background:var(--gray-50); color:#1A1A1A; }
+
+  header { background:var(--navy); padding:16px 28px; color:#fff; display:flex; align-items:center; gap:12px; }
+  header .logo { width:32px;height:32px;background:rgba(255,255,255,.15);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:16px; }
+  header .title { font-size:15px; font-weight:700; }
+  header .sub { font-size:11px; opacity:.6; margin-top:2px; }
+
+  .container { max-width:920px; margin:0 auto; padding:24px 20px 60px; }
+
+  /* upload grid */
+  .upload-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; margin-bottom:20px; }
+  .upload-card { background:#fff; border:1px solid var(--gray-200); border-radius:8px; overflow:hidden; }
+  .upload-card-head { padding:10px 14px; font-size:11px; font-weight:700; border-bottom:1px solid var(--gray-200); display:flex; align-items:center; gap:6px; }
+  .upload-card-head.usd { background:var(--navy); color:#fff; }
+  .upload-card-head.eur { background:var(--green); color:#fff; }
+  .upload-card-head.etc { background:#7F6000; color:#fff; }
+  .upload-card-body { padding:14px; }
+  .upload-zone {
+    border:2px dashed var(--gray-200); border-radius:6px; padding:16px 12px;
+    text-align:center; cursor:pointer; transition:.15s; font-size:11px; color:var(--gray-500);
+    position:relative;
+  }
+  .upload-zone:hover { border-color:var(--navy-mid); background:var(--navy-light); }
+  .upload-zone.loaded { border-color:var(--green); border-style:solid; background:var(--green-light); color:var(--green); }
+  .upload-zone input[type=file] { position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100%; }
+  .upload-label { pointer-events:none; }
+
+  .run-wrap { text-align:center; margin:4px 0 20px; }
+  .btn-run {
+    background:var(--navy); color:#fff; border:none; padding:13px 48px;
+    font-size:14px; font-weight:700; border-radius:6px; cursor:pointer;
+    transition:.2s; box-shadow:0 2px 8px rgba(31,78,121,.3);
+  }
+  .btn-run:hover:not(:disabled) { background:var(--navy-mid); }
+  .btn-run:disabled { background:var(--gray-200); color:var(--gray-500); cursor:not-allowed; box-shadow:none; }
+
+  /* cards */
+  .card { background:#fff; border:1px solid var(--gray-200); border-radius:8px; margin-bottom:20px; overflow:hidden; }
+  .card-head { background:var(--navy); color:#fff; padding:11px 18px; font-size:12px; font-weight:700; }
+  .card-body { padding:18px; }
+
+  /* stat grid */
+  .stat-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:20px; }
+  .stat-box { background:var(--gray-50); border:1px solid var(--gray-200); border-radius:6px; padding:14px 16px; }
+  .stat-box .label { font-size:10px; color:var(--gray-500); font-weight:600; margin-bottom:6px; }
+  .stat-box .value { font-size:22px; font-weight:800; color:var(--navy); font-family:var(--mono); }
+  .stat-box .sub { font-size:10px; color:var(--gray-500); margin-top:4px; font-family:var(--mono); }
+  .stat-box.total { background:var(--navy); border-color:var(--navy); }
+  .stat-box.total .label { color:rgba(255,255,255,.7); }
+  .stat-box.total .value { color:#fff; }
+  .stat-box.total .sub { color:rgba(255,255,255,.6); }
+
+  /* summary table */
+  .sum-table { width:100%; border-collapse:collapse; font-size:11px; }
+  .sum-table th { background:var(--navy); color:#fff; padding:8px 12px; text-align:center; font-size:10px; font-weight:700; }
+  .sum-table th:first-child { text-align:left; }
+  .sum-table td { padding:7px 12px; border-bottom:1px solid var(--gray-100); text-align:center; font-family:var(--mono); }
+  .sum-table td:first-child { text-align:left; font-family:'Segoe UI',Arial,sans-serif; font-weight:600; color:var(--navy); }
+  .sum-table tr:nth-child(even) td { background:var(--gray-50); }
+  .sum-table tr.total-row td { background:var(--navy); color:#fff; font-weight:700; }
+  .sum-table tr.total-row td:first-child { color:#fff; }
+
+  /* stat columns */
+  .two-col { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .three-col { display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; }
+
+  .mini-table { width:100%; border-collapse:collapse; font-size:11px; }
+  .mini-table th { background:var(--navy); color:#fff; padding:7px 10px; text-align:left; font-size:10px; }
+  .mini-table th:last-child { text-align:right; }
+  .mini-table td { padding:5px 10px; border-bottom:1px solid var(--gray-100); }
+  .mini-table td:last-child { text-align:right; font-family:var(--mono); font-weight:700; color:var(--navy); }
+  .mini-table tr:nth-child(even) td { background:var(--gray-50); }
+
+  .btn-dl {
+    background:var(--green); color:#fff; border:none; padding:10px 24px;
+    font-size:12px; font-weight:700; border-radius:6px; cursor:pointer;
+    transition:.15s; margin-top:16px;
+  }
+  .btn-dl:hover { opacity:.85; }
+
+  #results { display:none; }
+  .error-box { background:#FFF0F0; border:1px solid #C00000; border-radius:5px; padding:10px 14px; font-size:11px; color:#C00000; margin:8px 0; }
+  .notice { background:#FFF2CC; border:1px solid #E6C619; border-radius:5px; padding:8px 12px; font-size:10px; color:#7F6000; margin:8px 0; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">📊</div>
+  <div>
+    <div class="title">해외채권 투자 POOL 통합 집계</div>
+    <div class="sub">USD · EUR · 기타통화 통합 이슈어 통계</div>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- 업로드 -->
+  <div class="upload-grid">
+    <div class="upload-card">
+      <div class="upload-card-head usd">📘 USD POOL 결과</div>
+      <div class="upload-card-body">
+        <div class="upload-zone" id="zone-usd">
+          <input type="file" accept=".xlsx,.xls" onchange="loadPool('usd',this)">
+          <div class="upload-label">투자POOL_USD_*.xlsx<br><span style="font-size:9px">USD_POOL 시트 포함 파일</span></div>
+        </div>
+        <div id="status-usd" style="font-size:10px;color:var(--gray-500);margin-top:6px"></div>
+      </div>
+    </div>
+    <div class="upload-card">
+      <div class="upload-card-head eur">📗 EUR POOL 결과</div>
+      <div class="upload-card-body">
+        <div class="upload-zone" id="zone-eur">
+          <input type="file" accept=".xlsx,.xls" onchange="loadPool('eur',this)">
+          <div class="upload-label">투자POOL_EUR_*.xlsx<br><span style="font-size:9px">EUR_POOL 시트 포함 파일</span></div>
+        </div>
+        <div id="status-eur" style="font-size:10px;color:var(--gray-500);margin-top:6px"></div>
+      </div>
+    </div>
+    <div class="upload-card">
+      <div class="upload-card-head etc">📙 기타통화</div>
+      <div class="upload-card-body">
+        <div class="upload-zone" id="zone-etc">
+          <input type="file" accept=".xlsx,.xls" onchange="loadPool('etc',this)">
+          <div class="upload-label">기타통화 파일<br><span style="font-size:9px">기타통화 시트 포함 파일</span></div>
+        </div>
+        <div id="status-etc" style="font-size:10px;color:var(--gray-500);margin-top:6px"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="error-main"></div>
+
+  <div class="run-wrap">
+    <button class="btn-run" id="btn-run" onclick="runAgg()" disabled>▶ 통합 집계 실행</button>
+  </div>
+
+  <!-- 결과 -->
+  <div id="results">
+
+    <!-- 상단 stat -->
+    <div class="stat-grid">
+      <div class="stat-box total">
+        <div class="label">전체 이슈어 (통합)</div>
+        <div class="value" id="stat-total-issuer">—</div>
+        <div class="sub" id="stat-total-issuer-sub"></div>
+      </div>
+      <div class="stat-box">
+        <div class="label">USD 이슈어</div>
+        <div class="value" id="stat-usd">—</div>
+        <div class="sub" id="stat-usd-bonds">종목 —</div>
+      </div>
+      <div class="stat-box">
+        <div class="label">EUR 이슈어</div>
+        <div class="value" id="stat-eur">—</div>
+        <div class="sub" id="stat-eur-bonds">종목 —</div>
+      </div>
+      <div class="stat-box">
+        <div class="label">기타통화 이슈어</div>
+        <div class="value" id="stat-etc">—</div>
+        <div class="sub" id="stat-etc-bonds">종목 —</div>
+      </div>
+    </div>
+
+    <!-- 선정 결과 요약 -->
+    <div class="card">
+      <div class="card-head">■ 선정 결과 — 통화별 종목수 · 이슈어수</div>
+      <div class="card-body">
+        <table class="sum-table" id="tbl-summary"></table>
+        <div class="notice" style="margin-top:10px">※ 티커 기준으로 분류하여 이슈어 표기가 다를 수 있음. 모기업이 같은 경우가 이에 해당됨</div>
+      </div>
+    </div>
+
+    <!-- 항목별 이슈어 -->
+    <div class="two-col">
+      <div class="card">
+        <div class="card-head">* 발행통화별 이슈어 수</div>
+        <div class="card-body">
+          <table class="mini-table" id="tbl-currency">
+            <thead><tr><th>발행 통화</th><th>이슈어 수</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head">* 섹터별 이슈어 수 (BCLASS1 기준)</div>
+        <div class="card-body">
+          <table class="mini-table" id="tbl-sector">
+            <thead><tr><th>섹터</th><th>이슈어 수</th></tr></thead>
+            <tbody></tbody>
+          </table>
+          <div style="font-size:10px;color:var(--gray-500);margin-top:6px">※ BCLASS1 기준</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <div class="card-head">* 국가별 이슈어 수</div>
+      <div class="card-body">
+        <table class="mini-table" id="tbl-country">
+          <thead><tr><th>국가명</th><th>이슈어 수</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="run-wrap" style="margin-top:4px">
+      <button class="btn-dl" onclick="downloadResult()">⬇ 통합 집계 Excel 다운로드</button>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ── 국가코드 → 한글 매핑 ──────────────────────────────────────────
+const COUNTRY_MAP = {
+  AD:'안도라',AE:'아랍에미리트',AF:'아프가니스탄',AG:'앤티가바부다',AL:'알바니아',AM:'아르메니아',AO:'앙골라',AR:'아르헨티나',AT:'오스트리아',AU:'호주',AZ:'아제르바이잔',
+  BA:'보스니아헤르체고비나',BB:'바베이도스',BD:'방글라데시',BE:'벨기에',BF:'부르키나파소',BG:'불가리아',BH:'바레인',BM:'버뮤다',BN:'브루나이',BO:'볼리비아',BR:'브라질',
+  BS:'바하마',BW:'보츠와나',BY:'벨라루스',BZ:'벨리즈',CA:'캐나다',CH:'스위스',CL:'칠레',CN:'중국',CO:'콜롬비아',CR:'코스타리카',CY:'사이프러스',CZ:'체코',
+  DE:'독일',DK:'덴마크',DO:'도미니카공화국',DZ:'알제리',EC:'에콰도르',EE:'에스토니아',EG:'이집트',ES:'스페인',ET:'에티오피아',FI:'핀란드',FJ:'피지',FR:'프랑스',
+  GB:'영국',GE:'조지아',GH:'가나',GR:'그리스',GT:'과테말라',HK:'홍콩',HR:'크로아티아',HU:'헝가리',ID:'인도네시아',IE:'아일랜드',IL:'이스라엘',IN:'인도',
+  IS:'아이슬란드',IT:'이탈리아',JM:'자메이카',JO:'요르단',JP:'일본',KE:'케냐',KG:'키르기스스탄',KH:'캄보디아',KR:'한국',KW:'쿠웨이트',KZ:'카자흐스탄',
+  LB:'레바논',LI:'리히텐슈타인',LT:'리투아니아',LU:'룩셈부르크',LV:'라트비아',MA:'모로코',ME:'몬테네그로',MK:'북마케도니아',ML:'말리',MT:'몰타',MX:'멕시코',
+  MY:'말레이시아',NG:'나이지리아',NL:'네덜란드',NO:'노르웨이',NZ:'뉴질랜드',OM:'오만',PA:'파나마',PE:'페루',PH:'필리핀',PK:'파키스탄',PL:'폴란드',PT:'포르투갈',
+  PY:'파라과이',QA:'카타르',RO:'루마니아',RS:'세르비아',RU:'러시아',SA:'사우디아라비아',SE:'스웨덴',SG:'싱가포르',SI:'슬로베니아',SK:'슬로바키아',SN:'세네갈',
+  SNAT:'Supranational',TH:'태국',TN:'튀니지',TR:'튀르키예',TW:'대만',TZ:'탄자니아',UA:'우크라이나',UG:'우간다',US:'미국',UY:'우루과이',UZ:'우즈베키스탄',
+  VN:'베트남',ZA:'남아프리카공화국',ZM:'잠비아',ZW:'짐바브웨',
+};
+function countryName(code) {
+  if (!code) return '기타';
+  const c = String(code).trim().toUpperCase();
+  return COUNTRY_MAP[c] || c;
+}
+
+// ── STATE ────────────────────────────────────────────────────────
+const pools = { usd: null, eur: null, etc: null };
+// 각 pool 항목: { ticker, currency, bclass1, bclass2, bclass3, country }[]
+
+// ── FILE LOADING ──────────────────────────────────────────────────
+function loadPool(type, input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, {type:'array'});
+      let rows = [];
+
+      if (type === 'usd' || type === 'eur') {
+        // 앞선 툴의 출력 파일: USD_POOL 또는 EUR_POOL 시트
+        const sheetName = type === 'usd' ? 'USD_POOL' : 'EUR_POOL';
+        const ws = wb.Sheets[sheetName];
+        if (!ws) {
+          showError(`'${sheetName}' 시트를 찾을 수 없습니다. (${file.name})`);
+          return;
+        }
+        const raw = XLSX.utils.sheet_to_json(ws, {defval:''});
+        rows = raw
+          .filter(r => r['Ticker'] && String(r['Ticker']).trim())
+          .map(r => ({
+            ticker:   String(r['Ticker']).trim(),
+            currency: String(r['통화']   ||r['Currency']||'').trim() || type.toUpperCase(),
+            bclass1:  String(r['BCLASS 1']||'').trim(),
+            bclass2:  String(r['BCLASS 2']||'').trim(),
+            bclass3:  String(r['BCLASS 3']||'').trim(),
+            country:  String(r['국가']    ||r['Country']||'').trim(),
+            bonds:    Number(r['발행 수'] ||0),
+          }));
+
+      } else {
+        // 기타통화: 첫 번째 데이터 시트, 헤더 행 건너뛰기 (기타통화 시트 우선)
+        const sheetName = wb.SheetNames.includes('기타통화') ? '기타통화' : wb.SheetNames[0];
+        const ws = wb.Sheets[sheetName];
+        const raw = XLSX.utils.sheet_to_json(ws, {defval:'', header:1});
+        // 헤더 찾기 (티커 컬럼이 있는 행)
+        let headerIdx = -1;
+        raw.forEach((r, i) => { if (String(r[0]).trim() === '티커') headerIdx = i; });
+        if (headerIdx < 0) {
+          showError(`'기타통화' 시트에서 헤더(티커)를 찾을 수 없습니다.`);
+          return;
+        }
+        // 인덱스 하드코딩 대신 헤더명으로 컬럼 위치를 동적으로 파악
+        const headers = raw[headerIdx];
+        const col = {};
+        headers.forEach((h, i) => { if (h) col[String(h).trim()] = i; });
+        const iT  = col['티커']           ?? 0;
+        const iC  = col['통화']           ?? 2;
+        const iB1 = col['BCLASS 레벨1']   ?? 3;
+        const iB2 = col['BCLASS 레벨2']   ?? 4;
+        const iB3 = col['BCLASS 레벨3']   ?? 5;
+        const iCo = col['국가코드']       ?? col['국가'] ?? 10;
+        raw.slice(headerIdx+1).forEach(r => {
+          const ticker = String(r[iT]||'').trim();
+          if (!ticker) return;
+          rows.push({
+            ticker,
+            currency: String(r[iC] ||'').trim(),
+            bclass1:  String(r[iB1]||'').trim(),
+            bclass2:  String(r[iB2]||'').trim(),
+            bclass3:  String(r[iB3]||'').trim(),
+            country:  String(r[iCo]||'').trim(),
+            bonds:    1,
+          });
+        });
+      }
+
+      pools[type] = rows;
+      const zone = document.getElementById(`zone-${type}`);
+      zone.classList.add('loaded');
+      let lbl = zone.querySelector('.upload-label');
+      if (!lbl) { lbl = document.createElement('div'); lbl.className='upload-label'; zone.appendChild(lbl); }
+      lbl.innerHTML = `✅ ${file.name}<br><span style="font-size:9px">${rows.length.toLocaleString()}개 이슈어</span>`;
+      document.getElementById(`status-${type}`).textContent = '';
+      updateRunBtn();
+    } catch(err) {
+      showError(`파일 로드 오류 (${type.toUpperCase()}): ${err.message}`);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function updateRunBtn() {
+  const ready = pools.usd || pools.eur || pools.etc;
+  document.getElementById('btn-run').disabled = !ready;
+}
+
+function showError(msg) {
+  document.getElementById('error-main').innerHTML = `<div class="error-box">⚠️ ${msg}</div>`;
+}
+
+// ── AGGREGATION ───────────────────────────────────────────────────
+let aggResult = null;
+
+function runAgg() {
+  document.getElementById('error-main').innerHTML = '';
+
+  // 통합 이슈어 목록 — 같은 Ticker가 여러 통화에 걸쳐 나올 수 있으므로 통화+Ticker 복합키로 유일성 확보
+  const allRows = [
+    ...(pools.usd || []),
+    ...(pools.eur || []),
+    ...(pools.etc || []),
+  ];
+
+  if (allRows.length === 0) {
+    showError('업로드된 파일이 없습니다.');
+    return;
+  }
+
+  // 중복 제거: 통화+Ticker 복합키 (같은 이슈어가 USD·EUR 동시 존재 가능)
+  const seen = new Set();
+  const unique = allRows.filter(r => {
+    const key = `${r.currency}|${r.ticker}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  // 통화별 집계
+  const byCurrency = {};
+  allRows.forEach(r => {
+    const c = r.currency || '기타';
+    if (!byCurrency[c]) byCurrency[c] = { issuers: new Set(), bonds: 0 };
+    byCurrency[c].issuers.add(r.ticker);
+    byCurrency[c].bonds += r.bonds || 0;
+  });
+
+  // 섹터별 (중복 없는 이슈어 기준 — 한 이슈어가 두 통화에 있어도 bclass1이 같으면 1개로)
+  // 통화+Ticker 복합키로 중복 제거된 unique 기준
+  const bySector = {};
+  unique.forEach(r => {
+    const s = r.bclass1 || '기타';
+    if (!bySector[s]) bySector[s] = new Set();
+    bySector[s].add(`${r.currency}|${r.ticker}`);
+  });
+
+  // 국가별 (중복 없는 이슈어 기준)
+  const byCountry = {};
+  unique.forEach(r => {
+    const c = countryName(r.country);
+    if (!byCountry[c]) byCountry[c] = new Set();
+    byCountry[c].add(`${r.currency}|${r.ticker}`);
+  });
+
+  aggResult = { allRows, unique, byCurrency, bySector, byCountry };
+  renderResults();
+}
+
+// ── RENDER ────────────────────────────────────────────────────────
+function renderResults() {
+  const { unique, byCurrency, bySector, byCountry } = aggResult;
+  document.getElementById('results').style.display = 'block';
+
+  // stat boxes
+  const totalIssuers = unique.length;
+  const usdN = pools.usd ? [...new Set(pools.usd.map(r=>r.ticker))].length : 0;
+  const eurN = pools.eur ? [...new Set(pools.eur.map(r=>r.ticker))].length : 0;
+  const etcN = pools.etc ? [...new Set(pools.etc.map(r=>r.ticker))].length : 0;
+
+  document.getElementById('stat-total-issuer').textContent = totalIssuers.toLocaleString();
+  document.getElementById('stat-total-issuer-sub').textContent =
+    `(USD ${usdN.toLocaleString()} + EUR ${eurN.toLocaleString()} + 기타 ${etcN.toLocaleString()})`;
+  document.getElementById('stat-usd').textContent = usdN.toLocaleString();
+  document.getElementById('stat-eur').textContent = eurN.toLocaleString();
+  document.getElementById('stat-etc').textContent = etcN.toLocaleString();
+
+  const usdBonds = (pools.usd||[]).reduce((s,r)=>s+(r.bonds||0),0);
+  const eurBonds = (pools.eur||[]).reduce((s,r)=>s+(r.bonds||0),0);
+  const etcBonds = (pools.etc||[]).reduce((s,r)=>s+(r.bonds||0),0);
+  document.getElementById('stat-usd-bonds').textContent = `종목 ${usdBonds.toLocaleString()}`;
+  document.getElementById('stat-eur-bonds').textContent = `종목 ${eurBonds.toLocaleString()}`;
+  document.getElementById('stat-etc-bonds').textContent = `종목 ${etcBonds.toLocaleString()}`;
+
+  // 선정 결과 요약 테이블
+  const tbl = document.getElementById('tbl-summary');
+  const currencies = Object.keys(byCurrency).sort();
+  tbl.innerHTML = `
+    <thead><tr>
+      <th>통화</th><th>이슈어 수</th><th>비고</th>
+    </tr></thead>
+    <tbody>
+      ${currencies.map(c => `<tr>
+        <td>${c}</td>
+        <td>${byCurrency[c].issuers.size.toLocaleString()}</td>
+        <td style="font-size:10px;color:var(--gray-500);font-family:inherit"></td>
+      </tr>`).join('')}
+      <tr class="total-row">
+        <td>합계 (중복 제거)</td>
+        <td>${totalIssuers.toLocaleString()}</td>
+        <td style="font-size:10px;font-family:inherit">통화·Ticker 복합키 기준</td>
+      </tr>
+    </tbody>`;
+
+  // 통화별
+  fillMiniTable('tbl-currency', currencies.map(c => [c, byCurrency[c].issuers.size]));
+
+  // 섹터별
+  const sectorOrder = ['Treasury','Government-Related','Municipals','Corporate','Securitized'];
+  const sectorRows = sectorOrder
+    .filter(s => bySector[s])
+    .map(s => [s, bySector[s].size])
+    .concat(
+      Object.entries(bySector)
+        .filter(([s]) => !sectorOrder.includes(s))
+        .map(([s,v]) => [s, v.size])
+    );
+  fillMiniTable('tbl-sector', sectorRows);
+
+  // 국가별 (이슈어 수 내림차순)
+  const countryRows = Object.entries(byCountry)
+    .map(([c,v]) => [c, v.size])
+    .sort((a,b) => b[1]-a[1]);
+  fillMiniTable('tbl-country', countryRows);
+
+  document.getElementById('results').scrollIntoView({behavior:'smooth'});
+}
+
+function fillMiniTable(id, rows) {
+  const tbody = document.getElementById(id).querySelector('tbody');
+  tbody.innerHTML = rows.map(([k,v]) =>
+    `<tr><td>${k}</td><td>${v.toLocaleString()}</td></tr>`
+  ).join('');
+}
+
+// ── DOWNLOAD ──────────────────────────────────────────────────────
+function downloadResult() {
+  if (!aggResult) return;
+  const { unique, byCurrency, bySector, byCountry } = aggResult;
+  const wb = XLSX.utils.book_new();
+  const dateStr = () => { const d=new Date(); return `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`; };
+
+  // ─ 시트1: 선정결과 ─
+  const currencies = Object.keys(byCurrency).sort();
+  const usdBonds = (pools.usd||[]).reduce((s,r)=>s+(r.bonds||0),0);
+  const eurBonds = (pools.eur||[]).reduce((s,r)=>s+(r.bonds||0),0);
+  const etcBonds = (pools.etc||[]).reduce((s,r)=>s+(r.bonds||0),0);
+
+  const summaryData = [
+    ['■ 해외채권 투자 POOL 선정 결과'],
+    [],
+    ['통화', '이슈어 수', '비고'],
+    ...currencies.map(c => [c, byCurrency[c].issuers.size, '']),
+    [],
+    ['합계 (중복 제거)', unique.length, '통화·Ticker 복합키 기준 이슈어 수'],
+    [],
+    ['※ 티커 기준으로 분류하여 이슈어 표기가 다를 수 있음. 모기업이 같은 경우가 이에 해당됨'],
+  ];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summaryData), '선정결과');
+
+  // ─ 시트2: 항목별 이슈어 ─
+  const sectorOrder = ['Treasury','Government-Related','Municipals','Corporate','Securitized'];
+  const sectorRows = sectorOrder
+    .filter(s => bySector[s])
+    .map(s => [s, bySector[s].size])
+    .concat(Object.entries(bySector).filter(([s])=>!sectorOrder.includes(s)).map(([s,v])=>[s,v.size]));
+
+  const countryRows = Object.entries(byCountry)
+    .map(([c,v]) => [c, v.size])
+    .sort((a,b) => b[1]-a[1]);
+
+  const maxLen = Math.max(currencies.length, sectorRows.length, countryRows.length) + 2;
+
+  // 나란히 배치 (열 B·C = 통화별, E·F = 섹터별, H·I = 국가별)
+  const grid = Array.from({length: maxLen+4}, () => Array(9).fill(''));
+  grid[0][1]='* 발행통화별'; grid[0][4]='* 섹터별'; grid[0][7]='* 국가별';
+  grid[1][1]='발행 통화'; grid[1][2]='이슈어 수';
+  grid[1][4]='섹터'; grid[1][5]='이슈어 수';
+  grid[1][7]='국가명'; grid[1][8]='이슈어 수';
+  currencies.forEach((c,i)=>{ grid[2+i][1]=c; grid[2+i][2]=byCurrency[c].issuers.size; });
+  sectorRows.forEach(([s,v],i)=>{ grid[2+i][4]=s; grid[2+i][5]=v; });
+  countryRows.forEach(([c,v],i)=>{ grid[2+i][7]=c; grid[2+i][8]=v; });
+  grid[2+sectorRows.length+1][4]='※BCLASS1 기준';
+
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(grid), '항목별이슈어');
+
+  // ─ 시트3: 전체 이슈어 목록 (중복 제거) ─
+  const fullHdr = ['Ticker','통화','BCLASS 1','BCLASS 2','BCLASS 3','국가코드','국가명'];
+  const fullRows = [fullHdr,
+    ...unique.sort((a,b)=>a.ticker.localeCompare(b.ticker)).map(r=>[
+      r.ticker, r.currency, r.bclass1, r.bclass2, r.bclass3, r.country, countryName(r.country)
+    ])
+  ];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(fullRows), '통합이슈어목록');
+
+  XLSX.writeFile(wb, `투자POOL_통합집계_${dateStr()}.xlsx`);
+}
+</script>
+</body>
+</html>
