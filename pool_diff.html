@@ -98,6 +98,10 @@
   .warn{background:var(--amber-light);border:1px solid #E6C619;border-radius:5px;
     padding:8px 12px;font-size:10px;color:var(--amber);margin-bottom:12px;}
   #results{display:none;}
+  .site-nav { background:#16355f; display:flex; align-items:center; gap:0; padding:0 20px; border-bottom:1px solid rgba(255,255,255,.1); }
+  .site-nav a { color:rgba(255,255,255,.65); font-size:12px; font-weight:500; padding:0 14px; height:32px; display:flex; align-items:center; text-decoration:none; border-bottom:2px solid transparent; transition:.15s; white-space:nowrap; }
+  .site-nav a:hover { color:#fff; }
+  .site-nav a.nav-active { color:#fff; border-bottom-color:#60a5fa; }
 </style>
 </head>
 <body>
@@ -108,6 +112,11 @@
     <div class="sub">Ticker + Issuer Name 기준 · 신규 / 유지 / 제외 분류</div>
   </div>
 </header>
+  <nav class="site-nav">
+    <a href="index.html">📊 Pool 선정</a>
+    <a href="pool_diff.html" class="nav-active">🔄 분기 비교</a>
+    <a href="pool_aggregator.html">🔗 통합 집계</a>
+  </nav>
 
 <div class="container">
   <div class="upload-grid">
