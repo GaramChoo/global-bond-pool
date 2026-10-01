@@ -278,18 +278,30 @@ function loadPool(type, input) {
           showError(`'${sheetName}' 시트를 찾을 수 없습니다. (${file.name})`);
           return;
         }
-        const raw = XLSX.utils.sheet_to_json(ws, {defval:''});
-        rows = raw
-          .filter(r => r['Ticker'] && String(r['Ticker']).trim())
-          .map(r => ({
-            ticker:   String(r['Ticker']).trim(),
-            currency: String(r['통화']   ||r['Currency']||'').trim() || type.toUpperCase(),
-            bclass1:  String(r['BCLASS 1']||'').trim(),
-            bclass2:  String(r['BCLASS 2']||'').trim(),
-            bclass3:  String(r['BCLASS 3']||'').trim(),
-            country:  String(r['국가']    ||r['Country']||'').trim(),
-            bonds:    Number(r['발행 수'] ||0),
-          }));
+        // raw 배열로 읽어 'Ticker' 헤더 행을 동적 탐색 (제목행이 앞에 있어도 대응)
+        const rawArr = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+        const hdrIdx = rawArr.findIndex(row => row.some(c => String(c).trim() === 'Ticker'));
+        if (hdrIdx < 0) {
+          showError(`'${sheetName}' 시트에서 Ticker 헤더를 찾을 수 없습니다.`);
+          return;
+        }
+        const hdr = rawArr[hdrIdx].map(c => String(c).trim());
+        const col = k => hdr.indexOf(k);
+        rows = [];
+        for (let i = hdrIdx + 1; i < rawArr.length; i++) {
+          const r = rawArr[i];
+          const ticker = String(r[col('Ticker')]||'').trim();
+          if (!ticker || ticker === 'Ticker') continue;
+          rows.push({
+            ticker,
+            currency: String(r[col('통화')]||r[col('Currency')]||'').trim() || type.toUpperCase(),
+            bclass1:  String(r[col('BCLASS 1')]||'').trim(),
+            bclass2:  String(r[col('BCLASS 2')]||'').trim(),
+            bclass3:  String(r[col('BCLASS 3')]||'').trim(),
+            country:  String(r[col('국가')]||r[col('Country')]||'').trim(),
+            bonds:    Number(r[col('발행 수')]||0),
+          });
+        }
 
       } else {
         // 기타통화: 첫 번째 데이터 시트, 헤더 행 건너뛰기 (기타통화 시트 우선)
